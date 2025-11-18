@@ -52,33 +52,6 @@ python -m flask --app api/index run
 
 Visit `http://localhost:5000` to test.
 
-## Step 6: Deploy to Vercel
-
-1. Install Vercel CLI:
-   ```bash
-   npm i -g vercel
-   ```
-
-2. Login:
-   ```bash
-   vercel login
-   ```
-
-3. Deploy:
-   ```bash
-   vercel
-   ```
-
-4. **Important**: Set environment variables in Vercel Dashboard:
-   - Go to your project → Settings → Environment Variables
-   - Add `FIREBASE_CREDENTIALS` with your Firebase JSON as a string
-   - Or add `FIREBASE_CREDENTIALS_PATH` if using file upload
-
-5. Deploy to production:
-   ```bash
-   vercel --prod
-   ```
-
 ## Troubleshooting
 
 ### "Firebase credentials not found"
