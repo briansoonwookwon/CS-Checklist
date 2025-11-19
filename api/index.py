@@ -1,22 +1,42 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import os
 from datetime import datetime
 import json
 import time
-from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
+try:
+    # Werkzeug's secure_filename is handy; fall back to a simple sanitizer if not available
+    from werkzeug.utils import secure_filename
+except Exception:
+    def secure_filename(name: str) -> str:
+        return os.path.basename(name).replace(' ', '_')
+
 load_dotenv()
+
 # Get the project root directory (parent of 'api' folder)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 static_folder = os.path.join(project_root, 'static')
 
-app = Flask(__name__, static_folder=static_folder, static_url_path='/static')
-CORS(app)
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
+app = FastAPI()
+
+# Enable CORS for the frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files (local dev)
+if os.path.isdir(static_folder):
+    app.mount('/static', StaticFiles(directory=static_folder), name='static')
 
 # Initialize Firebase references
 db = None
@@ -56,15 +76,6 @@ except Exception as e:
     print(f"Warning: Firebase initialization failed: {e}")
 
 
-def convert_firestore_timestamp(timestamp):
-    """Convert Firestore timestamp/datetime to ISO string."""
-    if timestamp is None:
-        return None
-    if hasattr(timestamp, 'isoformat'):
-        return timestamp.isoformat()
-    return str(timestamp)
-
-
 def make_json_serializable(data):
     """Recursively convert Firestore data to JSON-serializable format."""
     if isinstance(data, dict):
@@ -83,15 +94,16 @@ def ensure_firebase():
         init_firebase()
 
 
-@app.route('/api/health', methods=['GET'])
-def health():
-    return jsonify({"status": "ok"})
+@app.get('/api/health')
+async def health():
+    return JSONResponse({"status": "ok"})
 
 
-@app.route('/api/checklist', methods=['GET'])
-def get_checklist():
+@app.get('/api/checklist')
+async def get_checklist(date: str | None = None):
     """Get checklist items for a specific date."""
-    date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    if not date:
+        date = datetime.now().strftime('%Y-%m-%d')
 
     try:
         ensure_firebase()
@@ -101,25 +113,25 @@ def get_checklist():
 
         if doc.exists:
             data = doc.to_dict()
-            return jsonify(make_json_serializable(data))
+            return JSONResponse(make_json_serializable(data))
         else:
-            return jsonify({
+            return JSONResponse({
                 'date': date,
                 'items': [],
                 'checked': {},
                 'photos': {}
             })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist', methods=['POST'])
-def update_checklist():
+@app.post('/api/checklist')
+async def update_checklist(payload: dict):
     """Replace the checklist state for a date."""
-    data = request.json or {}
-    date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
-    items = data.get('items', [])
-    checked = data.get('checked', {})
+    date = payload.get('date', datetime.now().strftime('%Y-%m-%d'))
+    items = payload.get('items', [])
+    checked = payload.get('checked', {})
+    photos = payload.get('photos', {})
 
     try:
         ensure_firebase()
@@ -129,23 +141,23 @@ def update_checklist():
             'date': date,
             'items': items,
             'checked': checked,
+            'photos': photos,
             'lastUpdated': firestore.SERVER_TIMESTAMP
         }, merge=True)
-        return jsonify({"success": True})
+        return JSONResponse({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist/toggle', methods=['POST'])
-def toggle_check():
+@app.post('/api/checklist/toggle')
+async def toggle_check(data: dict):
     """Toggle a specific checklist item for a user."""
-    data = request.json or {}
     date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
     item_id = data.get('item_id')
     user = data.get('user', 'anonymous')
 
     if not item_id:
-        return jsonify({"error": "Missing item_id"}), 400
+        raise HTTPException(status_code=400, detail="Missing item_id")
 
     try:
         ensure_firebase()
@@ -187,15 +199,15 @@ def toggle_check():
         if updated_doc.exists:
             updated_data = updated_doc.to_dict()
             serializable_checked = make_json_serializable(updated_data.get('checked', {}))
-            return jsonify({"success": True, "checked": serializable_checked})
+            return JSONResponse({"success": True, "checked": serializable_checked})
         else:
-            return jsonify({"success": True, "checked": {}})
+            return JSONResponse({"success": True, "checked": {}})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist/items', methods=['GET'])
-def get_checklist_items():
+@app.get('/api/checklist/items')
+async def get_checklist_items():
     """Return the master checklist item definitions."""
     try:
         ensure_firebase()
@@ -204,18 +216,17 @@ def get_checklist_items():
         doc = doc_ref.get()
         if doc.exists:
             data = doc.to_dict()
-            return jsonify(make_json_serializable(data))
+            return JSONResponse(make_json_serializable(data))
         else:
-            return jsonify({"items": []})
+            return JSONResponse({"items": []})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist/items', methods=['POST'])
-def set_checklist_items():
+@app.post('/api/checklist/items')
+async def set_checklist_items(payload: dict):
     """Replace the master checklist item definitions."""
-    data = request.json or {}
-    items = data.get('items', [])
+    items = payload.get('items', [])
 
     try:
         ensure_firebase()
@@ -225,13 +236,13 @@ def set_checklist_items():
             'items': items,
             'lastUpdated': firestore.SERVER_TIMESTAMP
         })
-        return jsonify({"success": True})
+        return JSONResponse({"success": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist/last-completions', methods=['GET'])
-def get_last_completions():
+@app.get('/api/checklist/last-completions')
+async def get_last_completions():
     """Get the last completion date for each task across all dates."""
     try:
         ensure_firebase()
@@ -259,42 +270,35 @@ def get_last_completions():
                         if doc_date > last_completions[item_id]:
                             last_completions[item_id] = doc_date
 
-        return jsonify({"lastCompletions": last_completions})
+        return JSONResponse({"lastCompletions": last_completions})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route('/api/checklist/photo', methods=['POST'])
-def upload_photo():
+@app.post('/api/checklist/photo')
+async def upload_photo(date: str = Form(...), item_id: str = Form(...), user: str = Form('anonymous'), photo: UploadFile = File(...)):
     """Upload a verification photo for a checklist item."""
-    if 'photo' not in request.files:
-        return jsonify({"error": "No photo provided"}), 400
-
-    file = request.files['photo']
-    date = request.form.get('date')
-    item_id = request.form.get('item_id')
-    user = request.form.get('user', 'anonymous')
-
     if not date or not item_id or not user:
-        return jsonify({"error": "Missing required fields"}), 400
+        raise HTTPException(status_code=400, detail='Missing required fields')
 
-    if file.filename == '':
-        return jsonify({"error": "Empty filename"}), 400
+    if not photo.filename:
+        raise HTTPException(status_code=400, detail='Empty filename')
 
-    if not file.mimetype or not file.mimetype.startswith('image/'):
-        return jsonify({"error": "Only image uploads are allowed"}), 400
+    if not photo.content_type or not photo.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail='Only image uploads are allowed')
 
     try:
         ensure_firebase()
         if bucket is None:
-            return jsonify({"error": "Photo uploads require FIREBASE_STORAGE_BUCKET to be configured"}), 500
+            return JSONResponse({"error": "Photo uploads require FIREBASE_STORAGE_BUCKET to be configured"}, status_code=500)
 
-        safe_name = secure_filename(file.filename)
+        safe_name = secure_filename(photo.filename)
         timestamp = int(time.time())
         blob_path = f"checklists/{date}/{item_id}/{timestamp}_{safe_name}"
 
         blob = bucket.blob(blob_path)
-        blob.upload_from_file(file, content_type=file.mimetype)
+        # Upload from the UploadFile's file-like object
+        blob.upload_from_file(photo.file, content_type=photo.content_type)
         blob.make_public()
 
         photo_entry = {
@@ -320,42 +324,38 @@ def upload_photo():
             doc_data = updated_doc.to_dict()
             photos = make_json_serializable(doc_data.get('photos', {}))
 
-        return jsonify({"success": True, "photos": photos})
+        return JSONResponse({"success": True, "photos": photos})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # -------- Static asset helpers for local dev -------- #
-@app.route('/')
-def index():
+@app.get('/')
+async def index():
     """Serve the main HTML page."""
-    return send_from_directory(static_folder, 'index.html')
+    index_path = os.path.join(static_folder, 'index.html')
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
-@app.route('/<path:filename>')
-def serve_static(filename):
+@app.get('/{filename:path}')
+async def serve_static(filename: str):
     """Serve static assets when running locally."""
+    # Avoid serving API routes here
     if filename.startswith('api/'):
-        return jsonify({"error": "Not found"}), 404
+        return JSONResponse({"error": "Not found"}, status_code=404)
 
     file_path = os.path.join(static_folder, filename)
     if os.path.exists(file_path) and os.path.isfile(file_path):
-        return send_from_directory(static_folder, filename)
-    return jsonify({"error": "Not found"}), 404
+        return FileResponse(file_path)
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
-# Vercel serverless function handler (WSGI)
-# Vercel invokes Python serverless functions using the WSGI-style
-# callable signature (environ, start_response). Forward the call
-# directly to the Flask WSGI app so the server handles response
-# headers/status correctly.
-def handler(environ, start_response):
-    try:
-        ensure_firebase()
-    except Exception as e:
-        print(f"Firebase init error: {e}")
-
-    return app(environ, start_response)
+# Vercel serverless function handler (ASGI)
+# Export an ASGI-compatible handler so Vercel can invoke this app.
+async def handler(scope, receive, send):
+    await app(scope, receive, send)
 
 
 __all__ = ['handler', 'app']
