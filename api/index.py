@@ -40,8 +40,12 @@ def init_firebase():
     if not firebase_admin._apps:
         cred_path = os.environ.get('FIREBASE_CREDENTIALS')
         if cred_path:
-            cred_dict = json.loads(cred_path)
-            cred = credentials.Certificate(cred_dict)
+            try:
+                # Try raw JSON
+                cred = credentials.Certificate(json.loads(cred_path))
+            except json.JSONDecodeError:
+                # Assume it's a file path instead
+                cred = credentials.Certificate(cred_path)
         else:
             cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
             if os.path.exists(cred_path):
