@@ -4,8 +4,7 @@ const API_BASE = window.location.origin + '/api';
 // Get current date in YYYY-MM-DD format
 function getTodayDate() {
     const today = new Date();
-    // Use UTC date parts to prevent timezone issues when comparing YYYY-MM-DD strings
-    return new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    return today.toISOString().split('T')[0];
 }
 
 // Initialize
@@ -199,9 +198,6 @@ function renderChecklist() {
         return;
     }
     
-    // Get today's actual date for comparison
-    const actualToday = getTodayDate();
-
     // Sort items by period, process, equipment, then fallback to order
     const sortedItems = [...checklistItems].sort((a, b) => {
         const periodA = a.periodDays != null ? a.periodDays : Number.MAX_SAFE_INTEGER;
@@ -225,13 +221,6 @@ function renderChecklist() {
         const equipmentMatches = filterEquipment === 'all' || (item.equipment || 'General') === filterEquipment;
         const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
         const periodMatches = filterPeriod === 'all' || periodValue === filterPeriod;
-        
-        // --- START OF FIX (Option 1) ---
-        // If viewing a past date, skip the period-based auto-filtering
-        if (currentDate < actualToday) {
-            return processMatches && equipmentMatches && periodMatches;
-        }
-        // --- END OF FIX ---
         
         // Period-based auto-filtering: show task if enough days have passed since last completion
         const periodDays = item.periodDays;
@@ -285,7 +274,8 @@ function renderChecklist() {
                         </div>
                     ` : ''}
                     <div class="item-actions" onclick="event.stopPropagation();">
-                        </div>
+                        <!-- Photo upload removed -->
+                    </div>
                 </div>
             </div>
         `;
@@ -410,3 +400,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load checklist on page load
 loadChecklist();
+
+
