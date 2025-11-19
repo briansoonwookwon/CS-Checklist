@@ -97,7 +97,10 @@ async def get_checklist(date: str | None = None):
 
         if doc.exists:
             data = doc.to_dict()
-            return JSONResponse(make_json_serializable(data))
+            return JSONResponse(make_json_serializable{
+                **data,
+                "checked": make_json_serializable(data.get('checked', {}))
+            })
         else:
             return JSONResponse({
                 'date': date,
@@ -121,7 +124,6 @@ async def update_checklist(payload: dict):
         doc_ref = db.collection('checklists').document(date)
         doc_ref.set({
             'date': date,
-            'items': items,
             'checked': checked,
             'lastUpdated': firestore.SERVER_TIMESTAMP
         }, merge=True)
@@ -195,7 +197,10 @@ async def get_checklist_items():
         doc = doc_ref.get()
         if doc.exists:
             data = doc.to_dict()
-            return JSONResponse(make_json_serializable(data))
+            return JSONResponse(make_json_serializable{
+                **data,
+                "checked": make_json_serializable(data.get('checked', {}))
+            })
         else:
             return JSONResponse({"items": []})
     except Exception as e:
