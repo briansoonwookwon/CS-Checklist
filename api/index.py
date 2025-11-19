@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import time
 # from dotenv import load_dotenv
@@ -253,6 +253,65 @@ async def get_last_completions():
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.get('/api/summary/calendar')
+async def get_calendar_summary(start_date: str, end_date: str):
+    """
+    Retrieves summary data (who submitted, how many checked) for all dates 
+    between start_date and end_date (YYYY-MM-DD).
+    """
+    try:
+        ensure_firebase()
+        
+        # Convert string dates to datetime objects for comparison
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        current_dt = start_dt
+        summary_data = {}
+        
+        # Iterate through all days in the range
+        while current_dt <= end_dt:
+            date_str = current_dt.strftime('%Y-%m-%d')
+            doc_ref = db.collection('checklists').document(date_str)
+            doc = doc_ref.get()
+            
+            day_summary = {
+                'submitted': False,
+                'total_checked': 0,
+                'users': {}  # {user_name: count}
+            }
+
+            if doc.exists:
+                data = doc.to_dict()
+                
+                # Check if the document has any checked items
+                if data and data.get('checked'):
+                    day_summary['submitted'] = True
+                    all_checked_items = data['checked']
+                    
+                    # Calculate total checks and user counts
+                    total_checked = 0
+                    user_checks = {}
+                    
+                    for item_id, user_data in all_checked_items.items():
+                        for user_name, check_info in user_data.items():
+                            if check_info.get('checked'):
+                                total_checked += 1
+                                user_checks[user_name] = user_checks.get(user_name, 0) + 1
+                    
+                    day_summary['total_checked'] = total_checked
+                    day_summary['users'] = user_checks
+            
+            summary_data[date_str] = day_summary
+            
+            # Move to the next day
+            current_dt += timedelta(days=1)
+
+        return JSONResponse(summary_data)
+        
+    except Exception as e:
+        print(f"Error fetching calendar summary: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # -------- Static asset helpers for local dev -------- #
 @app.get('/')
