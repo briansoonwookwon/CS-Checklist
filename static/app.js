@@ -43,7 +43,8 @@ dateInput.addEventListener('change', (e) => {
 });
 
 userInput.addEventListener('change', (e) => {
-    currentUser = e.target.value;
+    // Trim and use a default value for interaction logic
+    currentUser = e.target.value.trim(); 
     localStorage.setItem('checklist_user', currentUser);
     renderChecklist();
 });
@@ -120,27 +121,23 @@ async function loadChecklist() {
 
 // Toggle check for an item
 async function toggleCheck(itemId) {
-    // Local-only toggle: mark/unmark checkedItems locally and wait for explicit submit
-    if (!currentUser) {
-        alert('Please enter your name first!');
-        userInput.focus();
-        return;
-    }
+    // If user name is empty, use 'anonymous' for tracking
+    const activeUser = currentUser || 'anonymous';
 
     // Ensure structure exists
     if (!checkedItems[itemId]) {
         checkedItems[itemId] = {};
     }
 
-    if (checkedItems[itemId][currentUser]) {
+    if (checkedItems[itemId][activeUser]) {
         // Uncheck locally
-        delete checkedItems[itemId][currentUser];
+        delete checkedItems[itemId][activeUser];
         if (Object.keys(checkedItems[itemId]).length === 0) {
             delete checkedItems[itemId];
         }
     } else {
         // Check locally with an ISO timestamp (server will replace with its timestamp on submit)
-        checkedItems[itemId][currentUser] = {
+        checkedItems[itemId][activeUser] = {
             timestamp: new Date().toISOString(),
             checked: true
         };
@@ -152,8 +149,9 @@ async function toggleCheck(itemId) {
 
 // Submit the entire checklist (persist checked items and photos) for the current date
 async function submitChecklist() {
+    // Submission still requires a user name to avoid confusion in audit logs
     if (!currentUser) {
-        alert('Please enter your name first!');
+        alert('Please enter your name first before submitting the full checklist!');
         userInput.focus();
         return;
     }
@@ -226,12 +224,11 @@ function renderChecklist() {
         const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
         const periodMatches = filterPeriod === 'all' || periodValue === filterPeriod;
         
-        // --- START OF FIX (Option 1) ---
-        // If viewing a past date, skip the period-based auto-filtering
+        // --- FIX 1: Allow past dates to show all periodic items ---
         if (currentDate < actualToday) {
             return processMatches && equipmentMatches && periodMatches;
         }
-        // --- END OF FIX ---
+        // --- END FIX 1 ---
         
         // Period-based auto-filtering: show task if enough days have passed since last completion
         const periodDays = item.periodDays;
@@ -261,7 +258,9 @@ function renderChecklist() {
     }
 
     checklistDiv.innerHTML = filteredItems.map(item => {
-        const isChecked = checkedItems[item.id];
+        // --- FIX 2: Check if ANY user completed the task for visual checkmark ---
+        const isChecked = checkedItems[item.id]; 
+        
         const checkedBy = checkedItems[item.id] ? Object.keys(checkedItems[item.id]) : [];
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
@@ -281,7 +280,7 @@ function renderChecklist() {
                     </div>
                     ${checkedBy.length > 0 ? `
                         <div class="item-meta">
-                            Checked by: ${checkedBy.map(u => `<span class="checked-by">${escapeHtml(u)}</span>`).join('')}
+                            Checked by: ${checkedBy.map(u => `<span class="checked-by">${escapeHtml(u)}</span>`).join(', ')}
                         </div>
                     ` : ''}
                     <div class="item-actions" onclick="event.stopPropagation();">
@@ -297,9 +296,12 @@ function renderChecklist() {
 // Update statistics
 function updateStats(visibleItems) {
     const total = visibleItems.length;
+    // --- FIX 3: Update stats to reflect checks by ANY user ---
     const checked = visibleItems.filter(item =>
-        checkedItems[item.id]
+        checkedItems[item.id] // Check if the item ID exists in checkedItems (meaning any user checked it)
     ).length;
+    // --- END FIX 3 ---
+
     const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
     
     totalItemsSpan.textContent = total;
@@ -308,6 +310,7 @@ function updateStats(visibleItems) {
 }
 
 // Utility functions
+// ... (all other utility functions like showLoading, hideLoading, formatPeriodLabel, etc., remain the same)
 function showLoading() {
     loadingDiv.style.display = 'block';
     checklistContainer.style.display = 'none';
@@ -393,6 +396,7 @@ function fillSelect(selectElement, values, defaultLabel, formatter) {
         selectElement.value = 'all';
     }
 }
+
 
 // Make toggleCheck available globally
 window.toggleCheck = toggleCheck;
