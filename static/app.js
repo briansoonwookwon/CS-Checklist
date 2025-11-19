@@ -261,7 +261,7 @@ function renderChecklist() {
     }
 
     checklistDiv.innerHTML = filteredItems.map(item => {
-        const isChecked = checkedItems[item.id] && checkedItems[item.id][currentUser];
+        const isChecked = checkedItems[item.id];
         const checkedBy = checkedItems[item.id] ? Object.keys(checkedItems[item.id]) : [];
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
@@ -298,7 +298,7 @@ function renderChecklist() {
 function updateStats(visibleItems) {
     const total = visibleItems.length;
     const checked = visibleItems.filter(item =>
-        checkedItems[item.id] && checkedItems[item.id][currentUser]
+        checkedItems[item.id]
     ).length;
     const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
     
