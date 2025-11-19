@@ -81,7 +81,7 @@ def fetch_master_item_count():
     """Fetches the total number of items in the master checklist."""
     try:
         # Assuming the master checklist items are stored here, same place as /checklist/items reads from
-        doc_ref = db.collection('metadata').document('checklist_items')
+        doc_ref = db.collection('config').document('checklist_items')
         doc = doc_ref.get()
         if doc.exists and 'items' in doc.to_dict():
             return len(doc.to_dict()['items'])
