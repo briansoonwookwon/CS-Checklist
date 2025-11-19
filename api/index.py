@@ -279,9 +279,10 @@ async def serve_static(filename: str):
 
 # Vercel serverless function handler (ASGI)
 # Export an ASGI-compatible handler so Vercel can invoke this app.
-async def handler(scope, receive, send):
-    await app(scope, receive, send)
+# async def handler(scope, receive, send):
+#     await app(scope, receive, send)
 
 
-__all__ = ['handler', 'app']
-
+# __all__ = ['handler', 'app']
+from mangum import Mangum
+handler = Mangum(app)
