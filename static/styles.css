@@ -458,3 +458,81 @@ header h1 {
     margin: 0 15px;
     padding: 5px 10px;
 }
+
+/* --- Button Styles for .submit-btn (Used for Submit and View Summary) --- */
+
+/* Base style for the button and the link that shares its class */
+.submit-btn button,
+.submit-btn a {
+    /* Layout and Spacing */
+    display: inline-block;
+    padding: 12px 25px;
+    
+    /* Appearance */
+    background: #4B0082; /* Deep violet color (fits the gradient) */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    
+    /* Text */
+    font-size: 1em;
+    font-weight: 600;
+    text-decoration: none; /* Removes the underline for the anchor tag */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    
+    /* Interaction */
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    
+    /* Ensure consistency for the anchor tag */
+    text-align: center;
+    line-height: normal; /* Prevents stretching if used inside a flex container */
+}
+
+/* Hover effect */
+.submit-btn button:hover,
+.submit-btn a:hover {
+    background: #5D3FD3; /* Lighter purple on hover */
+    transform: translateY(-2px); /* Slight lift */
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Active/Clicked state */
+.submit-btn button:active,
+.submit-btn a:active {
+    transform: translateY(0);
+    background: #3F0071; /* Darker shade on click */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Style for the container div if needed (optional, depends on your HTML structure) */
+/* If you use: <div class="submit-btn"><button>...</button></div>, 
+   the styles above target the button/link inside the div. */
+.submit-btn {
+    /* This ensures the wrapper div doesn't interfere */
+    display: inline-block;
+}
+
+/* --- Calendar Controls Button Enhancement --- */
+
+#calendar-controls button {
+    /* Inherits basic button style from before, but let's make it look cleaner */
+    background: #667eea; /* Primary color */
+    color: white;
+    border: none;
+    border-radius: 50%; /* Makes them circular */
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0;
+    font-size: 1.2em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#calendar-controls button:hover {
+    background: #5a6fd6;
+}
