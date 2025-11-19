@@ -8,16 +8,9 @@ import os
 from datetime import datetime
 import json
 import time
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-try:
-    # Werkzeug's secure_filename is handy; fall back to a simple sanitizer if not available
-    from werkzeug.utils import secure_filename
-except Exception:
-    def secure_filename(name: str) -> str:
-        return os.path.basename(name).replace(' ', '_')
-
-load_dotenv()
+# load_dotenv()
 
 # Get the project root directory (parent of 'api' folder)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

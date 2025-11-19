@@ -77,7 +77,6 @@ FIREBASE_CREDENTIALS_PATH=firebase-credentials.json
 # OR
 FIREBASE_CREDENTIALS={"type":"service_account",...}  # JSON string
 FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 ```
 
 ### 6. Local Development
