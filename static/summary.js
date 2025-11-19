@@ -165,5 +165,14 @@ nextButton.addEventListener('click', async () => {
     await loadCalendarForMonth(currentViewDate);
 });
 
+document.addEventListener('DOMContentLoaded', () => {
+    const returnBtn = document.getElementById('return-btn');
+    if (returnBtn) {
+        returnBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            submitChecklist();
+        });
+    }
+});
 // Run initialization
 initCalendar();
