@@ -344,14 +344,18 @@ def serve_static(filename):
     return jsonify({"error": "Not found"}), 404
 
 
-# Vercel serverless function handler
-def handler(request):
+# Vercel serverless function handler (WSGI)
+# Vercel invokes Python serverless functions using the WSGI-style
+# callable signature (environ, start_response). Forward the call
+# directly to the Flask WSGI app so the server handles response
+# headers/status correctly.
+def handler(environ, start_response):
     try:
         ensure_firebase()
     except Exception as e:
         print(f"Firebase init error: {e}")
 
-    return app(request.environ, lambda status, headers: None)
+    return app(environ, start_response)
 
 
 __all__ = ['handler', 'app']
