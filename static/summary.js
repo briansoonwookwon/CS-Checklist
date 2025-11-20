@@ -112,18 +112,25 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         
         let content = `<div class="day-number">${day}</div>`;
         let dayClass = 'calendar-day';
+        let elementTag = 'div'; // Default for empty days
 
+        if (dayData || dateStr >= getTodayDate()) {
+            // Only make current/future/data-filled days links
+            elementTag = 'a';
+            dayClass += ' clickable';
+        }
+        
         if (dayData) {
             dayClass += ' has-data';
             
-            // Generate user summary list (UPDATED LIST ITEM)
+            // ... (rest of existing logic for summary-details remains here) ...
+            // The userSummaries and content concatenation should remain unchanged
             const userSummaries = Object.entries(dayData.users)
-                // SHOWS COUNT / TOTAL ITEMS
                 .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
                 .join('');
                 
             if (dayData.submitted) {
-                 dayClass += ' submitted';
+                dayClass += ' submitted';
             }
 
             content += `
@@ -134,7 +141,9 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
             `;
         }
 
-        calendarGrid.innerHTML += `<div class="${dayClass}">${content}</div>`;
+        const linkAttribute = (elementTag === 'a') ? `href="index.html?date=${dateStr}"` : '';
+
+        calendarGrid.innerHTML += `<${elementTag} ${linkAttribute} class="${dayClass}">${content}</${elementTag}>`;
     }
 }
 
