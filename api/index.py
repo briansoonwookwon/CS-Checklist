@@ -144,10 +144,12 @@ async def update_checklist(payload: dict):
 
 @app.post('/api/checklist/toggle')
 async def toggle_check(data: dict):
-    """Toggle a specific checklist item for a user."""
+    """Toggle a specific checklist item for a user and save an optional note."""
     date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
     item_id = data.get('item_id')
     user = data.get('user', 'anonymous')
+    # --- FIX 1: Corrected payload reference to 'data' and extracted note ---
+    note = data.get('note', '') 
 
     if not item_id:
         raise HTTPException(status_code=400, detail="Missing item_id")
@@ -173,13 +175,17 @@ async def toggle_check(data: dict):
             checked[item_id] = {}
 
         if user in checked[item_id]:
+            # Unchecking the item
             del checked[item_id][user]
             if not checked[item_id]:
                 del checked[item_id]
         else:
+            # Checking the item
             checked[item_id][user] = {
                 'timestamp': firestore.SERVER_TIMESTAMP,
-                'checked': True
+                'checked': True,
+                # --- FIX 2: Added the 'note' field to the saved data ---
+                'note': note
             }
 
         checklist_data['checked'] = checked

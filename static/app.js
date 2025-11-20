@@ -36,6 +36,23 @@ function formatTime(timestamp) {
     }
 }
 
+/**
+ * Updates the local checklist state when a note is typed, ensuring it's ready to be saved on next action.
+ * @param {string} itemId 
+ * @param {string} note 
+ */
+function updateItemNote(itemId, note) {
+    if (!currentUser) return;
+
+    // Check if the item is already checked by the current user
+    if (checkedItems[itemId] && checkedItems[itemId][currentUser]) {
+        // Item is checked: update the note field in the local state
+        checkedItems[itemId][currentUser].note = note;
+    } 
+    // If the item is not checked, we won't save the note until the user checks the item.
+    // The note will still be in the textarea for the next toggle action.
+}
+
 // Initialize
 let currentDate = getDateFromUrl() || getTodayDate(); // *** FIX: Prioritize date from URL ***
 let currentUser = localStorage.getItem('checklist_user') || '';
@@ -151,6 +168,13 @@ async function loadChecklist() {
 async function toggleCheck(itemId) {
     // If user name is empty, use 'anonymous' for tracking
     const activeUser = currentUser || 'anonymous';
+    
+    // --- NEW: Read the note from the item's textarea ---
+    // Get the element using the ID we defined in renderChecklist
+    const noteInput = document.getElementById(`note-input-${itemId}`);
+    // Capture the value. If the input doesn't exist (e.g., if the user hasn't fully implemented renderChecklist yet), default to an empty string.
+    const note = noteInput ? noteInput.value : '';
+    // --- END NEW ---
 
     // Ensure structure exists
     if (!checkedItems[itemId]) {
@@ -159,6 +183,7 @@ async function toggleCheck(itemId) {
 
     if (checkedItems[itemId][activeUser]) {
         // Uncheck locally
+        // Note: This correctly removes the note along with the check status
         delete checkedItems[itemId][activeUser];
         if (Object.keys(checkedItems[itemId]).length === 0) {
             delete checkedItems[itemId];
@@ -167,7 +192,9 @@ async function toggleCheck(itemId) {
         // Check locally with an ISO timestamp (server will replace with its timestamp on submit)
         checkedItems[itemId][activeUser] = {
             timestamp: new Date().toISOString(),
-            checked: true
+            checked: true,
+            // --- NEW: Store the captured note in local state ---
+            note: note
         };
     }
 
@@ -291,23 +318,32 @@ function renderChecklist() {
         // Check if ANY user completed the task for visual checkmark
         const isChecked = checkedItems[item.id]; 
         
-        // --- NEW/MODIFIED LOGIC START ---
-        // Get an array of [user, data] pairs if item is checked
+        // 1. Determine the existing note for the current user
+        let existingNote = '';
+        const currentUserCheckData = checkedItems[item.id] ? checkedItems[item.id][currentUser] : null;
+        if (currentUserCheckData && currentUserCheckData.note) {
+            existingNote = currentUserCheckData.note;
+        }
+        
+        const noteInputId = `note-input-${item.id}`; // Unique ID for the textarea
+        
+        // 2. Get an array of [user, data] pairs if item is checked
         const checkedEntries = checkedItems[item.id] ? Object.entries(checkedItems[item.id]) : [];
         
         let checkedByHtml = '';
         if (checkedEntries.length > 0) {
             checkedByHtml = checkedEntries.map(([user, data]) => {
-                // Assuming formatTime function is defined elsewhere in app.js
                 const timeStr = formatTime(data.timestamp); 
                 
-                // Construct the span with the user name and the formatted time
-                return `<span class="checked-by">${escapeHtml(user)} ${timeStr}</span>`;
-            }).join(', '); // Join multiple checkers with a comma
+                // --- MODIFIED: REMOVED ${data.note ? ... } FROM HERE ---
+                return `
+                    <span class="checked-by">
+                        ${escapeHtml(user)} ${timeStr}
+                    </span>
+                `;
+            }).join(', '); // Join multiple checkers with a comma and space
         }
         
-        // --- NEW/MODIFIED LOGIC END ---
-
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
         const taskLabel = item.item || item.text || 'Task';
@@ -330,7 +366,15 @@ function renderChecklist() {
                         </div>
                     ` : ''}
                     <div class="item-actions" onclick="event.stopPropagation();">
-                        </div>
+                        <textarea 
+                            id="${noteInputId}" 
+                            class="item-note-input" 
+                            rows="1" 
+                            placeholder="Add notes for this item (optional)..."
+                            onblur="updateItemNote('${item.id}', this.value)"
+                            onclick="event.stopPropagation();"
+                        >${escapeHtml(existingNote)}</textarea>
+                    </div>
                 </div>
             </div>
         `;
