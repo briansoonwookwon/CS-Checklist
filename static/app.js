@@ -79,8 +79,16 @@ periodFilterSelect.addEventListener('change', (e) => {
 async function loadChecklistItems() {
     try {
         const response = await fetch(`${API_BASE}/checklist/items`);
+        // 1. Check for bad HTTP status (4xx or 5xx)
+        if (!response.ok) {
+            // Read the body as plain text to get the actual error message
+            const errorText = await response.text();
+            throw new Error(`Server Status ${response.status}. Response starts with: "${errorText.substring(0, 50)}..."`);
+        }
+
+        // 2. Try to parse the response as JSON
         const data = await response.json();
-        
+
         if (data.items && data.items.length > 0) {
             checklistItems = data.items;
             populateFilters();
