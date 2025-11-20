@@ -67,20 +67,26 @@ function getStartAndEndDate(dateInMonth) {
  * @param {Object} completionsDict Dictionary of last completion dates {itemId: dateStr}.
  * @returns {number} Count of items that are due on that date.
  */
+/**
+ * Filters items ONLY if the date being checked is the actual current day,
+ * otherwise returns the full master list size.
+ */
 function getItemsDueForDate(dateStr, masterItems, completionsDict) {
     const actualTodayStr = getTodayDate();
+    
+    // If the date being checked is NOT the current day (past or future), 
+    // return the full list size (27) to keep the denominator stable.
+    if (dateStr !== actualTodayStr) { 
+         return masterItems.length; 
+    }
+
+    // --- Filtering Logic (only runs if dateStr === actualTodayStr) ---
+
     const dateToCheck = new Date(dateStr + 'T00:00:00');
 
     return masterItems.filter(item => {
-        // Rule: If viewing a past date, all items are considered 'due' for the denominator
-        if (dateStr < actualTodayStr) { 
-             return true; 
-        }
-
-        // Rule: If viewing today/future, apply periodic filtering (Rule 3)
         const periodDays = item.periodDays;
         
-        // Non-periodic items (periodDays null or <= 0) are always due
         if (periodDays == null || periodDays <= 0) {
             return true;
         }
@@ -96,8 +102,6 @@ function getItemsDueForDate(dateStr, masterItems, completionsDict) {
                 return false; 
             }
         }
-        
-        // If it passed all checks, it's due.
         return true;
     }).length;
 }
