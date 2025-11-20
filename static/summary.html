@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checklist Summary Calendar</title>
+    <link rel="stylesheet" href="styles.css"> 
+</head>
+<body>
+    <div class="container"></div>
+        <header>
+            <h1>Checklist Summary</h1>
+            <div class="submit-btn"> 
+                <button id="return-btn" class="return-btn">Back to Checklist</button> 
+            </div>
+        </header>
+
+        <div id="calendar-controls">
+            <button id="prev-month"> &lt; </button>
+            <span id="current-month-year"></span>
+            <button id="next-month"> &gt; </button>
+        </div>
+
+        <div id="calendar-container">
+            <div id="calendar-header"></div>
+            <div id="calendar-grid"></div>
+        </div>
+    </div>
+    
+    <script src="summary.js"></script>
+</body>
+</html>

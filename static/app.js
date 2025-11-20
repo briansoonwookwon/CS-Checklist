@@ -4,7 +4,8 @@ const API_BASE = window.location.origin + '/api';
 // Get current date in YYYY-MM-DD format
 function getTodayDate() {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    // Use UTC date parts to prevent timezone issues when comparing YYYY-MM-DD strings
+    return new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 }
 
 // Initialize
@@ -42,7 +43,8 @@ dateInput.addEventListener('change', (e) => {
 });
 
 userInput.addEventListener('change', (e) => {
-    currentUser = e.target.value;
+    // Trim and use a default value for interaction logic
+    currentUser = e.target.value.trim(); 
     localStorage.setItem('checklist_user', currentUser);
     renderChecklist();
 });
@@ -119,27 +121,23 @@ async function loadChecklist() {
 
 // Toggle check for an item
 async function toggleCheck(itemId) {
-    // Local-only toggle: mark/unmark checkedItems locally and wait for explicit submit
-    if (!currentUser) {
-        alert('Please enter your name first!');
-        userInput.focus();
-        return;
-    }
+    // If user name is empty, use 'anonymous' for tracking
+    const activeUser = currentUser || 'anonymous';
 
     // Ensure structure exists
     if (!checkedItems[itemId]) {
         checkedItems[itemId] = {};
     }
 
-    if (checkedItems[itemId][currentUser]) {
+    if (checkedItems[itemId][activeUser]) {
         // Uncheck locally
-        delete checkedItems[itemId][currentUser];
+        delete checkedItems[itemId][activeUser];
         if (Object.keys(checkedItems[itemId]).length === 0) {
             delete checkedItems[itemId];
         }
     } else {
         // Check locally with an ISO timestamp (server will replace with its timestamp on submit)
-        checkedItems[itemId][currentUser] = {
+        checkedItems[itemId][activeUser] = {
             timestamp: new Date().toISOString(),
             checked: true
         };
@@ -151,8 +149,9 @@ async function toggleCheck(itemId) {
 
 // Submit the entire checklist (persist checked items and photos) for the current date
 async function submitChecklist() {
+    // Submission still requires a user name to avoid confusion in audit logs
     if (!currentUser) {
-        alert('Please enter your name first!');
+        alert('Please enter your name first before submitting the full checklist!');
         userInput.focus();
         return;
     }
@@ -189,8 +188,6 @@ async function submitChecklist() {
     }
 }
 
-// Photo upload feature removed. Photo-related functions and UI were deleted.
-
 // Render checklist
 function renderChecklist() {
     if (checklistItems.length === 0) {
@@ -198,6 +195,9 @@ function renderChecklist() {
         return;
     }
     
+    // Get today's actual date for comparison
+    const actualToday = getTodayDate();
+
     // Sort items by period, process, equipment, then fallback to order
     const sortedItems = [...checklistItems].sort((a, b) => {
         const periodA = a.periodDays != null ? a.periodDays : Number.MAX_SAFE_INTEGER;
@@ -222,24 +222,34 @@ function renderChecklist() {
         const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
         const periodMatches = filterPeriod === 'all' || periodValue === filterPeriod;
         
-        // Period-based auto-filtering: show task if enough days have passed since last completion
+        // Check if the item is already checked for the current date (by anyone)
+        const isAlreadyCheckedToday = checkedItems[item.id];
+        
+        // Rule 1 & 2: If checked OR viewing a past date, always show the item
+        if (isAlreadyCheckedToday || currentDate < actualToday) {
+            return processMatches && equipmentMatches && periodMatches;
+        }
+        
+        // Rule 3: If unchecked AND viewing today/future, apply periodic filter
+        
         const periodDays = item.periodDays;
         if (periodDays != null && periodDays > 0) {
             const lastCompletionDate = lastCompletions[item.id];
+            
             if (lastCompletionDate) {
                 // Calculate days since last completion
                 const lastDate = new Date(lastCompletionDate + 'T00:00:00');
                 const today = new Date(currentDate + 'T00:00:00');
                 const daysSince = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
                 
-                // Show task only if days since last completion >= period days
+                // Hide task if NOT enough days have passed
                 if (daysSince < periodDays) {
-                    return false; // Hide task - not enough days have passed
+                    return false; 
                 }
             }
-            // If never completed, show it (needs to be done)
         }
         
+        // If it passed all checks (manual filters and periodic requirement or never done), show it.
         return processMatches && equipmentMatches && periodMatches;
     });
     
@@ -250,7 +260,9 @@ function renderChecklist() {
     }
 
     checklistDiv.innerHTML = filteredItems.map(item => {
-        const isChecked = checkedItems[item.id] && checkedItems[item.id][currentUser];
+        // Check if ANY user completed the task for visual checkmark
+        const isChecked = checkedItems[item.id]; 
+        
         const checkedBy = checkedItems[item.id] ? Object.keys(checkedItems[item.id]) : [];
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
@@ -270,12 +282,11 @@ function renderChecklist() {
                     </div>
                     ${checkedBy.length > 0 ? `
                         <div class="item-meta">
-                            Checked by: ${checkedBy.map(u => `<span class="checked-by">${escapeHtml(u)}</span>`).join('')}
+                            Checked by: ${checkedBy.map(u => `<span class="checked-by">${escapeHtml(u)}</span>`).join(', ')}
                         </div>
                     ` : ''}
                     <div class="item-actions" onclick="event.stopPropagation();">
-                        <!-- Photo upload removed -->
-                    </div>
+                        </div>
                 </div>
             </div>
         `;
@@ -287,9 +298,11 @@ function renderChecklist() {
 // Update statistics
 function updateStats(visibleItems) {
     const total = visibleItems.length;
+    // Update stats to reflect checks by ANY user
     const checked = visibleItems.filter(item =>
-        checkedItems[item.id] && checkedItems[item.id][currentUser]
+        checkedItems[item.id] // Check if the item ID exists in checkedItems (meaning any user checked it)
     ).length;
+
     const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
     
     totalItemsSpan.textContent = total;
@@ -396,9 +409,15 @@ document.addEventListener('DOMContentLoaded', () => {
             submitChecklist();
         });
     }
+
+    const summaryNavBtn = document.getElementById('summary-btn');
+    if (summaryNavBtn) {
+        summaryNavBtn.addEventListener('click', () => {
+            // Redirect the user to the summary page
+            window.location.href = 'summary.html';
+        });
+    }
 });
 
 // Load checklist on page load
 loadChecklist();
-
-
