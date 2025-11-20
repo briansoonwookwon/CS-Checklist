@@ -8,8 +8,19 @@ function getTodayDate() {
     return new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 }
 
+// NEW: Function to read date from URL query parameter
+function getDateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    // Check if the URL parameter 'date' exists and is a valid date string
+    const dateParam = params.get('date');
+    if (dateParam && dateParam.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateParam;
+    }
+    return null;
+}
+
 // Initialize
-let currentDate = getTodayDate();
+let currentDate = getDateFromUrl() || getTodayDate(); // *** FIX: Prioritize date from URL ***
 let currentUser = localStorage.getItem('checklist_user') || '';
 let checklistItems = [];
 let checkedItems = {};
