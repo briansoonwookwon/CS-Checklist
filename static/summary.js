@@ -28,6 +28,15 @@ function formatDate(date) {
 }
 
 /**
+ * Gets today's date in YYYY-MM-DD format for comparison.
+ * @returns {string}
+ */
+function getTodayDate() {
+    const today = new Date();
+    return new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+}
+
+/**
  * Calculates the start and end date (YYYY-MM-DD) for the month being viewed.
  * @param {Date} dateInMonth 
  * @returns {{startDate: string, endDate: string}}
@@ -104,6 +113,8 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         calendarGrid.innerHTML += '<div class="calendar-day empty"></div>';
     }
 
+    const actualToday = getTodayDate(); // Get today for comparison
+
     // 4. Render days
     for (let day = 1; day <= lastDayOfMonth; day++) {
         const date = new Date(year, month, day);
@@ -113,28 +124,53 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         let content = `<div class="day-number">${day}</div>`;
         let dayClass = 'calendar-day';
 
+        // Logic to determine if the day should be a link
+        const isClickable = !!dayData || dateStr >= actualToday;
+        
+        let elementTag = isClickable ? 'a' : 'div';
+        const linkAttribute = isClickable ? `href="index.html?date=${dateStr}"` : '';
+
         if (dayData) {
             dayClass += ' has-data';
             
-            // Generate user summary list (UPDATED LIST ITEM)
+            // --- NEW STATUS LOGIC START ---
+            let statusText;
+            let statusClass;
+            const checkedCount = dayData.total_checked;
+
+            if (checkedCount === 0) {
+                // Case 1: Nothing checked
+                statusText = '❌ Incomplete';
+                statusClass = 'incomplete';
+            } else if (checkedCount === totalItemsCount) {
+                // Case 2: All items checked
+                statusText = '✅ Checked';
+                statusClass = 'checked';
+                dayClass += ' submitted'; // Keep the green background for fully checked days
+            } else {
+                // Case 3: Some items checked, but not all
+                statusText = '⚠️ Ongoing';
+                statusClass = 'ongoing';
+            }
+            // --- NEW STATUS LOGIC END ---
+            
+            // Generate user summary list (remains the same)
             const userSummaries = Object.entries(dayData.users)
-                // SHOWS COUNT / TOTAL ITEMS
                 .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
                 .join('');
-                
-            if (dayData.submitted) {
-                 dayClass += ' submitted';
-            }
+            
+            // Note: The dayClass += ' submitted' from the old logic is now integrated into Case 2.
 
             content += `
                 <div class="summary-details">
-                    <p class="status">${dayData.submitted ? '✅ Submitted' : '❌ Incomplete'}</p>
+                    <p class="status ${statusClass}">${statusText}</p>
                     <ul class="user-list">${userSummaries}</ul>
                 </div>
             `;
         }
 
-        calendarGrid.innerHTML += `<div class="${dayClass}">${content}</div>`;
+        // Use the determined elementTag and attributes
+        calendarGrid.innerHTML += `<${elementTag} ${linkAttribute} class="${dayClass}">${content}</${elementTag}>`;
     }
 }
 
