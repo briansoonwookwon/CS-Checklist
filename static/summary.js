@@ -28,6 +28,15 @@ function formatDate(date) {
 }
 
 /**
+ * Gets today's date in YYYY-MM-DD format for comparison.
+ * @returns {string}
+ */
+function getTodayDate() {
+    const today = new Date();
+    return new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+}
+
+/**
  * Calculates the start and end date (YYYY-MM-DD) for the month being viewed.
  * @param {Date} dateInMonth 
  * @returns {{startDate: string, endDate: string}}
@@ -105,6 +114,8 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
     }
 
     // 4. Render days
+    const actualToday = getTodayDate(); // Get today for comparison
+
     for (let day = 1; day <= lastDayOfMonth; day++) {
         const date = new Date(year, month, day);
         const dateStr = formatDate(date);
@@ -112,20 +123,20 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         
         let content = `<div class="day-number">${day}</div>`;
         let dayClass = 'calendar-day';
-        let elementTag = 'div'; // Default for empty days
 
-        if (dayData || dateStr >= getTodayDate()) {
-            // Only make current/future/data-filled days links
-            elementTag = 'a';
-            dayClass += ' clickable';
-        }
+        // Logic to determine if the day should be a link
+        // It is clickable if it has data OR if it is today or a future date.
+        const isClickable = !!dayData || dateStr >= actualToday;
         
+        let elementTag = isClickable ? 'a' : 'div';
+        const linkAttribute = isClickable ? `href="index.html?date=${dateStr}"` : '';
+
         if (dayData) {
             dayClass += ' has-data';
             
-            // ... (rest of existing logic for summary-details remains here) ...
-            // The userSummaries and content concatenation should remain unchanged
+            // Generate user summary list (UPDATED LIST ITEM)
             const userSummaries = Object.entries(dayData.users)
+                // SHOWS COUNT / TOTAL ITEMS
                 .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
                 .join('');
                 
@@ -141,8 +152,7 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
             `;
         }
 
-        const linkAttribute = (elementTag === 'a') ? `href="index.html?date=${dateStr}"` : '';
-
+        // Use the determined elementTag and attributes
         calendarGrid.innerHTML += `<${elementTag} ${linkAttribute} class="${dayClass}">${content}</${elementTag}>`;
     }
 }
