@@ -229,7 +229,12 @@ function renderCalendar(summaryData, masterItems, completionsDict) {
                 dayClass += ' submitted'; 
             } else {
                 // Case 3: Some items checked, but not all (Ongoing)
-                statusText = '⚠️ Ongoing';
+                const remaining = totalItemsCount - checkedCount; // Calculated remaining here
+                
+                // This is the line that was likely causing the error! 
+                // We should show the status as Ongoing, not the remaining count.
+                // If you were seeing '19', this is likely where that number was appearing.
+                statusText = `⚠️ Ongoing (${remaining} remaining)`; 
                 statusClass = 'ongoing';
             }
             
