@@ -318,8 +318,6 @@ function renderChecklist() {
         // Check if ANY user completed the task for visual checkmark
         const isChecked = checkedItems[item.id]; 
         
-        // --- NEW/MODIFIED LOGIC START ---
-        
         // 1. Determine the existing note for the current user
         let existingNote = '';
         const currentUserCheckData = checkedItems[item.id] ? checkedItems[item.id][currentUser] : null;
@@ -337,17 +335,16 @@ function renderChecklist() {
             checkedByHtml = checkedEntries.map(([user, data]) => {
                 const timeStr = formatTime(data.timestamp); 
                 
-                // Construct the span with the user name, time, and note (if present)
+                // --- MODIFIED: REMOVED ${data.note ? ... } FROM HERE ---
                 return `
                     <span class="checked-by">
-                        ${escapeHtml(user)} ${timeStr}
-                        ${data.note ? ` (<span class="checked-note">${escapeHtml(data.note)}</span>)` : ''}
+                        ${escapeHtml(user)} 
+                        Time: 
+                        <span class="checked-by-time">${timeStr}</span>
                     </span>
                 `;
             }).join(', '); // Join multiple checkers with a comma and space
         }
-        
-        // --- NEW/MODIFIED LOGIC END ---
         
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
