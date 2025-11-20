@@ -10,7 +10,9 @@ const nextButton = document.getElementById('next-month');
 
 // State
 let currentViewDate = new Date(); // Tracks the month currently being viewed
-let totalMasterItems = 0; // NEW: Global variable to store total item count
+let masterItems = []; // Stores the full master checklist items
+let lastCompletions = {}; // Stores last completion dates {item_id: 'YYYY-MM-DD'}
+// totalMasterItems is now replaced by dynamic calculation
 
 // --- Utility Functions ---
 
@@ -57,11 +59,78 @@ function getStartAndEndDate(dateInMonth) {
     };
 }
 
+/**
+ * Calculates the total number of items DUE on a given date by applying
+ * the same periodic filtering logic found in app.js.
+ * @param {string} dateStr YYYY-MM-DD date being checked.
+ * @param {Array} masterItems Full list of checklist items.
+ * @param {Object} completionsDict Dictionary of last completion dates {itemId: dateStr}.
+ * @returns {number} Count of items that are due on that date.
+ */
+function getItemsDueForDate(dateStr, masterItems, completionsDict) {
+    const actualTodayStr = getTodayDate();
+    const dateToCheck = new Date(dateStr + 'T00:00:00');
+
+    return masterItems.filter(item => {
+        // Rule: If viewing a past date, all items are considered 'due' for the denominator
+        if (dateStr < actualTodayStr) { 
+             return true; 
+        }
+
+        // Rule: If viewing today/future, apply periodic filtering (Rule 3)
+        const periodDays = item.periodDays;
+        
+        // Non-periodic items (periodDays null or <= 0) are always due
+        if (periodDays == null || periodDays <= 0) {
+            return true;
+        }
+        
+        const lastCompletionDate = completionsDict[item.id];
+        
+        if (lastCompletionDate) {
+            const lastDate = new Date(lastCompletionDate + 'T00:00:00');
+            const daysSince = Math.floor((dateToCheck - lastDate) / (1000 * 60 * 60 * 24));
+            
+            // Hide task if NOT enough days have passed (i.e., NOT due)
+            if (daysSince < periodDays) {
+                return false; 
+            }
+        }
+        
+        // If it passed all checks, it's due.
+        return true;
+    }).length;
+}
+
 // --- Fetching Data ---
+
+// New function to fetch master items and completions once
+async function fetchMasterData() {
+    if (masterItems.length > 0) return; // Load only once
+
+    try {
+        // 1. Fetch full checklist item structure
+        const itemsResponse = await fetch(`${API_BASE}/checklist/items`);
+        const itemsData = await itemsResponse.json();
+        masterItems = itemsData.items || [];
+        
+        // 2. Fetch last completion dates
+        const completionsResponse = await fetch(`${API_BASE}/checklist/last-completions`);
+        const completionsData = await completionsResponse.json();
+        lastCompletions = completionsData.lastCompletions || {};
+    } catch (error) {
+         console.error('Error fetching master data:', error);
+         calendarGrid.innerHTML = `<p style="text-align: center; color: red;">Failed to load master data: ${error.message}</p>`;
+         // Re-throw to stop further loading
+         throw new Error('Failed to load master checklist and completion data.');
+    }
+}
+
 async function fetchSummaryData(date) {
     const { startDate, endDate } = getStartAndEndDate(date);
     
     try {
+        // NOTE: The backend still returns totalMasterItems, but we ignore it now.
         const response = await fetch(`${API_BASE}/summary/calendar?start_date=${startDate}&end_date=${endDate}`);
         
         if (!response.ok) {
@@ -69,8 +138,8 @@ async function fetchSummaryData(date) {
         }
         
         const data = await response.json();
-        // Returns {summaryData: {...}, totalMasterItems: N}
-        return data; 
+        // We only need data.summaryData now
+        return data.summaryData || {}; 
     } catch (error) {
         console.error('Error fetching calendar summary:', error);
         calendarGrid.innerHTML = `<p style="text-align: center; color: red;">Failed to load data: ${error.message}</p>`;
@@ -89,9 +158,10 @@ function renderHeader() {
 /**
  * Renders the calendar grid and populates cells with summary data.
  * @param {Object} summaryData - Data keyed by date string (YYYY-MM-DD).
- * @param {number} totalItemsCount - The total number of master checklist items.
+ * @param {Array} masterItems - Full list of checklist items.
+ * @param {Object} completionsDict - Dictionary of last completion dates.
  */
-function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
+function renderCalendar(summaryData, masterItems, completionsDict) {
     calendarGrid.innerHTML = '';
     calendarGrid.className = 'calendar-grid';
 
@@ -124,7 +194,12 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         let content = `<div class="day-number">${day}</div>`;
         let dayClass = 'calendar-day';
 
+        // --- DYNAMICALLY CALCULATE TOTAL DUE ITEMS ---
+        const totalItemsCount = getItemsDueForDate(dateStr, masterItems, completionsDict);
+        // --- END DYNAMIC CALCULATION ---
+        
         // Logic to determine if the day should be a link
+        // A day is clickable if it has data OR is today/future
         const isClickable = !!dayData || dateStr >= actualToday;
         
         let elementTag = isClickable ? 'a' : 'div';
@@ -133,18 +208,22 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         if (dayData) {
             dayClass += ' has-data';
             
-            // --- NEW STATUS LOGIC START ---
             let statusText;
             let statusClass;
             const checkedCount = dayData.total_checked;
 
-            if (checkedCount === 0 && dayData.submitted === false) { // Assuming document exists but 0 checks
+            if (totalItemsCount === 0) {
+                // If 0 items were due, mark as N/A or fully checked if 0 checks
+                statusText = 'N/A';
+                statusClass = 'checked';
+                dayClass += ' submitted';
+            } else if (checkedCount === 0) { 
                 // Case 1: Nothing checked (Incomplete)
                 statusText = '❌ Incomplete';
                 statusClass = 'incomplete';
-                dayClass += ' is-incomplete'; // <-- NEW CLASS HERE
-            } else if (checkedCount === totalItemsCount) {
-                // Case 2: All items checked (Checked)
+                dayClass += ' is-incomplete'; 
+            } else if (checkedCount >= totalItemsCount) {
+                // Case 2: All items checked
                 statusText = '✅ Checked';
                 statusClass = 'checked';
                 dayClass += ' submitted'; 
@@ -153,14 +232,12 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
                 statusText = '⚠️ Ongoing';
                 statusClass = 'ongoing';
             }
-            // --- NEW STATUS LOGIC END ---
             
-            // Generate user summary list (remains the same)
+            // Generate user summary list using the correct total count
             const userSummaries = Object.entries(dayData.users)
                 .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
                 .join('');
             
-            // Note: The dayClass += ' submitted' from the old logic is now integrated into Case 2.
 
             content += `
                 <div class="summary-details">
@@ -168,6 +245,11 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
                     <ul class="user-list">${userSummaries}</ul>
                 </div>
             `;
+        }
+
+        // Add today class
+        if (dateStr === actualToday) {
+            dayClass += ' today';
         }
 
         // Use the determined elementTag and attributes
@@ -183,12 +265,17 @@ async function initCalendar() {
 }
 
 async function loadCalendarForMonth(date) {
-    const responseData = await fetchSummaryData(date);
-    // NEW: Extract data from the response structure
-    const summaryData = responseData.summaryData || {};
-    totalMasterItems = responseData.totalMasterItems || 0; // Update global state
+    try {
+        await fetchMasterData(); // Ensure master data is loaded once
+    } catch (error) {
+        return; // Stop execution if master data failed
+    }
     
-    renderCalendar(summaryData, totalMasterItems); // UPDATED CALL
+    // Now fetch the summary data
+    const summaryData = await fetchSummaryData(date);
+    
+    // Pass summaryData, masterItems, and lastCompletions to renderCalendar
+    renderCalendar(summaryData, masterItems, lastCompletions);
 }
 
 // Event handlers for navigation
@@ -211,5 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
 // Run initialization
 initCalendar();
