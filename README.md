@@ -1,25 +1,23 @@
 # CS Checklist - Daily Tracking Web App
 
-A web-based checklist application for tracking daily tasks. Built with Python (Flask), Firebase, and deployed on Vercel.
+A web-based checklist application for tracking daily tasks. Built with Python (FastAPI), Firebase, and deployed on Vercel.
 
 ## Features
 
 - 📋 Daily checklist tracking with progress stats
 - 👥 Multi-user support (each user can mark their own checks)
 - 📅 Date-based tracking
-- 📷 Photo uploads per task for visual verification
 - 🔎 Filter tasks by process, equipment, or frequency
 - 🔁 Automatic sorting by process, equipment, and frequency (period)
 - 💾 Firebase (Firestore + Storage) for persistent storage
-- 🎨 Modern, responsive UI
 - ☁️ Deployable on Vercel
 
 ## Setup Instructions
 
 ### 1. Prerequisites
 
-- Python 3.8+
-- Firebase project with Firestore enabled
+- Python 3.10+
+- Firebase project
 - Vercel account (free tier works)
 
 ### 2. Firebase Setup
@@ -27,8 +25,7 @@ A web-based checklist application for tracking daily tasks. Built with Python (F
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Create a new project or use an existing one
 3. Enable Firestore Database
-4. Enable Firebase Storage (needed for photo uploads)
-5. Go to Project Settings > Service Accounts
+4. Go to Project Settings > Service Accounts
 6. Click "Generate New Private Key" to download your service account JSON file
 7. Save this file as `firebase-credentials.json` in the project root (or use environment variable)
 
@@ -47,100 +44,48 @@ python scripts/parse_excel.py
 ```
 
 This will:
-- Read `MILS_CellTracking_CS_CheckList.xlsx`
+- Read `CS_CheckList.xlsx`
 - Extract checklist items using the four-column schema (Process, Equipment, Item, Period)
 - Upload them to Firebase Firestore
 
-### 4.1 Excel File Format & Sorting
-
-Ensure your spreadsheet uses these columns (row 1 headers, row 2+ data):
-
-| Column | Header    | Type    | Description                                  |
-|--------|-----------|---------|----------------------------------------------|
-| A      | Process   | Text    | Manufacturing/process area (e.g., "Mixing")  |
-| B      | Equipment | Text    | Asset or station (e.g., "Reactor A")         |
-| C      | Item      | Text    | Checklist description                         |
-| D      | Period    | Integer | Days between checks (1 = every day, 7 = weekly) |
-
-The UI sorts tasks in this order:
-1. `Period` ascending (daily work floats to the top)
-2. `Process` alphabetically
-3. `Equipment` alphabetically
-4. Original row order (as entered in Excel)
-
-### 5. Environment Variables
-
-Create a `.env` file or set environment variables in Vercel:
-
-```
-FIREBASE_CREDENTIALS_PATH=firebase-credentials.json
-# OR
-FIREBASE_CREDENTIALS={"type":"service_account",...}  # JSON string
-FIREBASE_PROJECT_ID=your-project-id
-```
+No need to do this again unless there is a change in the checklist.
 
 ### 6. Local Development
 
-To test locally, you can use Flask's development server:
-
 ```bash
-# Install Flask CLI if needed
-pip install flask
 
-# Run the app
-flask --app api/index run
-```
-
-Or use Python directly:
-
-```bash
-python -m flask --app api/index run
 ```
 
 Then visit `http://localhost:5000` in your browser.
 
 ### 7. Deploy to Vercel
 
-1. Install Vercel CLI:
-   ```bash
-   npm i -g vercel
-   ```
-
-2. Login to Vercel:
-   ```bash
-   vercel login
-   ```
-
-3. Deploy:
-   ```bash
-   vercel
-   ```
-
-4. Set environment variables in Vercel Dashboard:
-   - Go to your project settings
-   - Add environment variables:
-     - `FIREBASE_CREDENTIALS`: Your Firebase credentials as a JSON string (recommended for Vercel)
-     - Or `FIREBASE_CREDENTIALS_PATH`: Path to credentials file (if using file upload)
-
-5. For production deployment:
-   ```bash
-   vercel --prod
-   ```
+Set environment variables in Vercel Dashboard:
+  - Go to your project settings
+  - Add environment variables:
+    - `FIREBASE_CREDENTIALS`: Your Firebase credentials as a JSON string (recommended for Vercel)
+    - Or `FIREBASE_CREDENTIALS_PATH`: Path to credentials file (if using file upload)
 
 ## Project Structure
 
 ```
 .
 ├── api/
-│   └── index.py          # Flask API endpoints
-├── static/
-│   ├── index.html        # Main HTML page
-│   ├── styles.css        # Styling
-│   └── app.js            # Frontend JavaScript
+│   └── index.py          # FastAPI API endpoints
 ├── scripts/
 │   └── parse_excel.py    # Excel parser and Firebase initializer
+├── static/
+│   ├── index.html        # Main HTML page
+│   ├── app.js            
+│   ├── summary.html      # Summary HTML page
+│   ├── summary.js
+│   └── styles.css        # Styling
 ├── requirements.txt      # Python dependencies
+├── .gitignore
+├── pyproject.toml  
 ├── vercel.json          # Vercel configuration
+├── uv.lock
+├── SETUP.md
 └── README.md            # This file
 ```
 

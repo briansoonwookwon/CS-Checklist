@@ -168,9 +168,9 @@ nextButton.addEventListener('click', async () => {
 document.addEventListener('DOMContentLoaded', () => {
     const returnBtn = document.getElementById('return-btn');
     if (returnBtn) {
-        returnBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            submitChecklist();
+        returnBtn.addEventListener('click', () => {
+            // Redirect the user to the index page
+            window.location.href = 'index.html';
         });
     }
 });
