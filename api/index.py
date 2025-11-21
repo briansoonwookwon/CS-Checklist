@@ -300,7 +300,9 @@ async def get_calendar_summary(start_date: str, end_date: str):
             day_summary = {
                 'submitted': False,
                 'total_checked': 0,
-                'users': {}  # {user_name: count}
+                'users': {},  # {user_name: count}
+                # Number of checklist items due that day (checked+unchecked). Default to master count.
+                'total_due': total_master_items
             }
 
             if doc.exists:
@@ -323,6 +325,12 @@ async def get_calendar_summary(start_date: str, end_date: str):
                     
                     day_summary['total_checked'] = total_checked
                     day_summary['users'] = user_checks
+                # If the document defines an `items` array, use its length for today's due count
+                if data and 'items' in data:
+                    try:
+                        day_summary['total_due'] = len(data.get('items', []))
+                    except Exception:
+                        day_summary['total_due'] = total_master_items
             
             summary_data[date_str] = day_summary
             

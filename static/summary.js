@@ -156,8 +156,11 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
             // --- NEW STATUS LOGIC END ---
             
             // Generate user summary list (remains the same)
+            // Determine how many items are due that day (checked + unchecked).
+            const dueCount = (typeof dayData.total_due === 'number') ? dayData.total_due : totalItemsCount;
+
             const userSummaries = Object.entries(dayData.users)
-                .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
+                .map(([user, count]) => `<li>${user}: ${count} / ${dueCount} checked</li>`)
                 .join('');
             
             // Note: The dayClass += ' submitted' from the old logic is now integrated into Case 2.
