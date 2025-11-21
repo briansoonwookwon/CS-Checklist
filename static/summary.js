@@ -72,37 +72,30 @@ function getStartAndEndDate(dateInMonth) {
  * otherwise returns the full master list size.
  */
 function getItemsDueForDate(dateStr, masterItems, completionsDict) {
-    const actualTodayStr = getTodayDate();
-    
-    // If the date being checked is NOT the current day (past or future), 
-    // return the full list size (27) to keep the denominator stable.
-    if (dateStr !== actualTodayStr) { 
-         return masterItems.length; 
-    }
-
-    // --- Filtering Logic (only runs if dateStr === actualTodayStr) ---
-
+    // Determine whether each master item is "due" on the given date.
+    // Rules:
+    // - If item.periodDays is null/<=0 -> always included (no periodic hiding).
+    // - If there is no last completion recorded -> include (never done => due).
+    // - Otherwise compute days since last completion relative to dateStr;
+    //   include the item if daysSince >= periodDays (i.e., it's due that day).
     const dateToCheck = new Date(dateStr + 'T00:00:00');
 
     return masterItems.filter(item => {
         const periodDays = item.periodDays;
-        
+
         if (periodDays == null || periodDays <= 0) {
             return true;
         }
-        
+
         const lastCompletionDate = completionsDict[item.id];
-        
-        if (lastCompletionDate) {
-            const lastDate = new Date(lastCompletionDate + 'T00:00:00');
-            const daysSince = Math.floor((dateToCheck - lastDate) / (1000 * 60 * 60 * 24));
-            
-            // Hide task if NOT enough days have passed (i.e., NOT due)
-            if (daysSince < periodDays) {
-                return false; 
-            }
+        if (!lastCompletionDate) {
+            return true; // never completed -> due
         }
-        return true;
+
+        const lastDate = new Date(lastCompletionDate + 'T00:00:00');
+        const daysSince = Math.floor((dateToCheck - lastDate) / (1000 * 60 * 60 * 24));
+
+        return daysSince >= periodDays;
     }).length;
 }
 
