@@ -127,6 +127,8 @@ async def health():
     return JSONResponse({"status": "ok"})
 
 
+# ... (inside get_checklist function)
+
 @app.get('/api/checklist')
 async def get_checklist(date: str | None = None):
     """Get checklist items for a specific date."""
@@ -143,9 +145,47 @@ async def get_checklist(date: str | None = None):
             data = doc.to_dict()
             return JSONResponse(make_json_serializable(data))
         else:
+            # --- NEW LOGIC: Generate a fresh list based on periodicity ---
+            
+            # 1. Fetch Master Items and History
+            master_items = fetch_master_items()
+            last_completions = fetch_all_last_completions()
+            
+            target_date = datetime.strptime(date, '%Y-%m-%d')
+            
+            filtered_items = []
+            
+            for item in master_items:
+                item_id = item.get('id')
+                period_days = item.get('periodDays')
+                
+                # Default assumption: Item is due
+                is_due = True
+
+                # Apply Periodic Logic if a period is defined and > 0
+                if period_days is not None and period_days > 0:
+                    last_completion_date_str = last_completions.get(item_id)
+                    
+                    if last_completion_date_str:
+                        last_date_dt = datetime.strptime(last_completion_date_str, '%Y-%m-%d')
+                        
+                        # Calculate days since last completion
+                        # We use 00:00:00 normalization to ensure accurate day counts
+                        delta = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - \
+                                last_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                        days_since = delta.days
+                        
+                        # LOGIC: If 3 day period, and 4 days passed -> Show (4 >= 3)
+                        # If 3 day period, and 1 day passed -> Hide (1 < 3)
+                        if days_since < period_days:
+                            is_due = False
+                
+                if is_due:
+                    filtered_items.append(item)
+
             return JSONResponse({
                 'date': date,
-                'items': [],
+                'items': filtered_items, # Return only the items that passed the filter
                 'checked': {}
             })
     except Exception as e:
