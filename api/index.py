@@ -126,9 +126,6 @@ def fetch_all_last_completions():
 async def health():
     return JSONResponse({"status": "ok"})
 
-
-# ... (inside get_checklist function)
-
 @app.get('/api/checklist')
 async def get_checklist(date: str | None = None):
     """Get checklist items for a specific date."""
@@ -343,6 +340,111 @@ async def get_last_completions():
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# @app.get('/api/summary/calendar')
+# async def get_calendar_summary(start_date: str, end_date: str):
+#     """
+#     Retrieves summary data, applying periodic recurrence logic to determine total_due items for each day.
+#     """
+#     try:
+#         ensure_firebase()
+        
+#         # 1. Fetch ALL required data once
+#         master_items = fetch_master_items() # Master item definitions
+#         last_completions = fetch_all_last_completions() # Last completion dates
+#         total_master_items = len(master_items) # Total master count for fallback
+        
+#         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+#         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+#         current_dt = start_dt
+#         summary_data = {}
+        
+#         # Iterate through all days in the range
+#         while current_dt <= end_dt:
+#             date_str = current_dt.strftime('%Y-%m-%d')
+            
+#             # --- NEW LOGIC: Calculate filtered item count (total_due) ---
+            
+#             items_due_count = 0
+            
+#             for item in master_items:
+#                 item_id = item.get('id')
+#                 period_days = item.get('periodDays')
+                
+#                 # Check if the task is due for the current day based on recurrence
+#                 is_due = True
+                
+#                 # Apply Rule 3: Periodic filter (Only if periodDays > 0)
+#                 if period_days is not None and period_days > 0:
+#                     last_completion_date_str = last_completions.get(item_id)
+                    
+#                     if last_completion_date_str:
+#                         # Calculate days since last completion
+#                         last_date_dt = datetime.strptime(last_completion_date_str, '%Y-%m-%d')
+#                         # Use 00:00:00 time to align with the front-end's date comparison
+#                         days_since = (current_dt.replace(hour=0, minute=0, second=0, microsecond=0) - last_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)).days
+                        
+#                         # Hide task if NOT enough days have passed
+#                         if days_since < period_days:
+#                             is_due = False
+
+#                 if is_due:
+#                     items_due_count += 1
+            
+#             # --- END NEW LOGIC ---
+            
+#             doc_ref = db.collection('checklists').document(date_str)
+#             doc = doc_ref.get()
+            
+#             day_summary = {
+#                 'submitted': False,
+#                 'total_checked': 0,
+#                 'users': {},  
+#                 # Set total_due to the filtered count, falling back to the full master count if calculation fails (unlikely here)
+#                 'total_due': items_due_count if items_due_count > 0 else total_master_items
+#             }
+
+#             if doc.exists:
+#                 data = doc.to_dict()
+                
+#                 if data and data.get('checked'):
+#                     day_summary['submitted'] = True
+#                     all_checked_items = data['checked']
+                    
+#                     # Calculate total checks and user counts
+#                     total_checked = 0
+#                     user_checks = {}
+                    
+#                     for item_id, user_data in all_checked_items.items():
+#                         # ONLY count an item as checked if it was one of the *due* items
+#                         # (This is implicitly handled by `total_checked` being a raw count 
+#                         # but we can improve `total_due` by checking if the due item list was saved)
+
+#                         for user_name, check_info in user_data.items():
+#                             if check_info.get('checked'):
+#                                 total_checked += 1
+#                                 user_checks[user_name] = user_checks.get(user_name, 0) + 1
+                    
+#                     day_summary['total_checked'] = total_checked
+#                     day_summary['users'] = user_checks
+                
+#                 # RETURNING: If a document exists, prioritize the saved `items` length
+#                 # which represents the actual list of items due when the user viewed the page.
+#                 # However, since you are calculating `items_due_count` dynamically for the summary,
+#                 # we should use the dynamic calculation, unless we detect the document saved a specific list.
+#                 # We will keep the calculated `items_due_count` as the primary `total_due`.
+            
+#             summary_data[date_str] = day_summary
+            
+#             # Move to the next day
+#             current_dt += timedelta(days=1)
+
+#         return JSONResponse({'summaryData': summary_data, 'totalMasterItems': total_master_items})
+        
+#     except Exception as e:
+#         print(f"Error fetching calendar summary: {e}")
+#         return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get('/api/summary/calendar')
 async def get_calendar_summary(start_date: str, end_date: str):
     """
@@ -367,6 +469,8 @@ async def get_calendar_summary(start_date: str, end_date: str):
             date_str = current_dt.strftime('%Y-%m-%d')
             
             # --- NEW LOGIC: Calculate filtered item count (total_due) ---
+            # We calculate this for every day, but we only use it if
+            # there is no saved document for that day (e.g. future dates).
             
             items_due_count = 0
             
@@ -374,7 +478,7 @@ async def get_calendar_summary(start_date: str, end_date: str):
                 item_id = item.get('id')
                 period_days = item.get('periodDays')
                 
-                # Check if the task is due for the current day based on recurrence
+                # Default assumption: Item is due
                 is_due = True
                 
                 # Apply Rule 3: Periodic filter (Only if periodDays > 0)
@@ -384,8 +488,11 @@ async def get_calendar_summary(start_date: str, end_date: str):
                     if last_completion_date_str:
                         # Calculate days since last completion
                         last_date_dt = datetime.strptime(last_completion_date_str, '%Y-%m-%d')
+                        
                         # Use 00:00:00 time to align with the front-end's date comparison
-                        days_since = (current_dt.replace(hour=0, minute=0, second=0, microsecond=0) - last_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)).days
+                        delta = current_dt.replace(hour=0, minute=0, second=0, microsecond=0) - \
+                                last_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                        days_since = delta.days
                         
                         # Hide task if NOT enough days have passed
                         if days_since < period_days:
@@ -402,14 +509,20 @@ async def get_calendar_summary(start_date: str, end_date: str):
             day_summary = {
                 'submitted': False,
                 'total_checked': 0,
-                'users': {},  
-                # Set total_due to the filtered count, falling back to the full master count if calculation fails (unlikely here)
-                'total_due': items_due_count if items_due_count > 0 else total_master_items
+                'users': {},
+                # Use the calculated count. 
+                # Removed 'else total_master_items' because if 0 items are due, we want to show 0.
+                'total_due': items_due_count
             }
 
             if doc.exists:
                 data = doc.to_dict()
                 
+                # IMPORTANT: If the day has saved data, use the SAVED 'items' length.
+                # This represents what was actually due/shown to the user on that day.
+                if data and 'items' in data:
+                    day_summary['total_due'] = len(data['items'])
+
                 if data and data.get('checked'):
                     day_summary['submitted'] = True
                     all_checked_items = data['checked']
@@ -419,23 +532,18 @@ async def get_calendar_summary(start_date: str, end_date: str):
                     user_checks = {}
                     
                     for item_id, user_data in all_checked_items.items():
-                        # ONLY count an item as checked if it was one of the *due* items
-                        # (This is implicitly handled by `total_checked` being a raw count 
-                        # but we can improve `total_due` by checking if the due item list was saved)
-
+                        # Check if any user checked this item
+                        is_item_checked = False
                         for user_name, check_info in user_data.items():
                             if check_info.get('checked'):
-                                total_checked += 1
+                                is_item_checked = True
                                 user_checks[user_name] = user_checks.get(user_name, 0) + 1
+                        
+                        if is_item_checked:
+                            total_checked += 1
                     
                     day_summary['total_checked'] = total_checked
                     day_summary['users'] = user_checks
-                
-                # RETURNING: If a document exists, prioritize the saved `items` length
-                # which represents the actual list of items due when the user viewed the page.
-                # However, since you are calculating `items_due_count` dynamically for the summary,
-                # we should use the dynamic calculation, unless we detect the document saved a specific list.
-                # We will keep the calculated `items_due_count` as the primary `total_due`.
             
             summary_data[date_str] = day_summary
             
