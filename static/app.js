@@ -167,6 +167,13 @@ async function loadChecklist() {
 
 // Toggle check for an item
 async function toggleCheck(itemId) {
+
+    if (!currentUser || currentUser.trim() === '') {
+        alert('Please enter your name first before checking any item.');
+        userInput.focus();
+        return; // Stop the function execution
+    }
+
     // If user name is empty, use 'anonymous' for tracking
     const activeUser = currentUser || 'anonymous';
     const isAlreadyChecked = checkedItems[itemId];
@@ -216,7 +223,7 @@ async function toggleCheck(itemId) {
 // Submit the entire checklist (persist checked items and photos) for the current date
 async function submitChecklist() {
     // Submission still requires a user name to avoid confusion in audit logs
-    if (!currentUser) {
+    if (!currentUser || currentUser.trim() === '') {
         alert('Please enter your name first before submitting the full checklist!');
         userInput.focus();
         return;
