@@ -169,7 +169,9 @@ async function loadChecklist() {
 async function toggleCheck(itemId) {
     // If user name is empty, use 'anonymous' for tracking
     const activeUser = currentUser || 'anonymous';
-    
+    const isAlreadyChecked = checkedItems[itemId];
+    const isCheckedByCurrentUser = isAlreadyChecked && checkedItems[itemId][activeUser];
+
     // --- NEW: Read the note from the item's textarea ---
     // Get the element using the ID we defined in renderChecklist
     const noteInput = document.getElementById(`note-input-${itemId}`);
@@ -177,24 +179,32 @@ async function toggleCheck(itemId) {
     const note = noteInput ? noteInput.value : '';
     // --- END NEW ---
 
-    // Ensure structure exists
+    // --- MODIFIED LOGIC: Allow toggle only if unchecked OR checked by activeUser ---
+    if (isAlreadyChecked && !isCheckedByCurrentUser) {
+        // Find the user who checked it
+        const checkerName = Object.keys(checkedItems[itemId])[0];
+        alert(`This item has already been completed by ${checkerName} for today.`);
+        return;
+    }
+    // --- END MODIFIED LOGIC ---
+
+    // Ensure structure exists (will only hold one key now)
     if (!checkedItems[itemId]) {
         checkedItems[itemId] = {};
     }
 
-    if (checkedItems[itemId][activeUser]) {
+    if (isCheckedByCurrentUser) {
         // Uncheck locally
-        // Note: This correctly removes the note along with the check status
-        delete checkedItems[itemId][activeUser];
-        if (Object.keys(checkedItems[itemId]).length === 0) {
-            delete checkedItems[itemId];
-        }
+        delete checkedItems[itemId]; // Simply remove the whole item entry
     } else {
-        // Check locally with an ISO timestamp (server will replace with its timestamp on submit)
+        // Check locally
+        // IMPORTANT: We only store the *current* user's check. 
+        // This is the core change to enforce a single check per item per day.
+        // We clear any existing check for this item first (though the check above should prevent this)
+        checkedItems[itemId] = {}; 
         checkedItems[itemId][activeUser] = {
             timestamp: new Date().toISOString(),
             checked: true,
-            // --- NEW: Store the captured note in local state ---
             note: note
         };
     }

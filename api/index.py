@@ -159,6 +159,17 @@ async def update_checklist(payload: dict):
     items = payload.get('items', [])
     checked = payload.get('checked', {})
 
+    validated_checked = {}
+    for item_id, user_data in checked.items():
+        if user_data:
+            # Get the first (and should be only) user who checked it
+            first_user = next(iter(user_data.keys()))
+            
+            # Use only the check data from that single user
+            validated_checked[item_id] = {first_user: user_data[first_user]}
+    
+    checked = validated_checked
+
     try:
         ensure_firebase()
 
