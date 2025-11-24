@@ -311,6 +311,25 @@ header h1 {
     align-items: center;
 }
 
+.item-note-input {
+    width: 100%;           /* Forces it to take the full width */
+    min-height: 80px;      /* Makes it tall enough for ~3-4 lines of text */
+    margin-top: 10px;      /* Adds space between the buttons and the text box */
+    padding: 10px;         /* Adds comfortable padding inside the box */
+    border: 1px solid #ddd;
+    border-radius: 8px;    /* Matches your existing rounded corners */
+    font-family: inherit;  /* Ensures it uses the same font as the rest of the app */
+    resize: vertical;      /* Allows the user to drag the bottom corner to resize */
+    background: #fafafa;   /* Slightly off-white background to distinguish it */
+    transition: border-color 0.2s;
+}
+
+.item-note-input:focus {
+    outline: none;
+    border-color: #667eea; /* Highlights purple when typing */
+    background: white;
+}
+
 .photo-upload-btn {
     background: #667eea;
     border: none;

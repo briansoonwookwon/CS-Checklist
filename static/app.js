@@ -385,7 +385,7 @@ function renderChecklist() {
                         <textarea 
                             id="${noteInputId}" 
                             class="item-note-input" 
-                            rows="1" 
+                            rows="2" 
                             placeholder="Add notes..."
                             onblur="updateItemNote('${item.id}', this.value)"
                             onclick="event.stopPropagation();"
