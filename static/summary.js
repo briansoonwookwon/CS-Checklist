@@ -154,10 +154,11 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
                 statusClass = 'ongoing';
             }
             // --- NEW STATUS LOGIC END ---
+            const dueCount = (typeof dayData.total_due === 'number') ? dayData.total_due : totalItemsCount;
             
             // Generate user summary list (remains the same)
             const userSummaries = Object.entries(dayData.users)
-                .map(([user, count]) => `<li>${user}: ${count} / ${totalItemsCount} checked</li>`)
+                .map(([user, count]) => `<li>${user}: ${count} / ${dueCount} checked</li>`)
                 .join('');
             
             // Note: The dayClass += ' submitted' from the old logic is now integrated into Case 2.
