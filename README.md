@@ -53,10 +53,10 @@ No need to do this again unless there is a change in the checklist.
 ### 6. Local Development
 
 ```bash
-
+uv run uvicorn api.index:app --reload
 ```
 
-Then visit `http://localhost:5000` in your browser.
+Then visit `http://localhost:8000` in your browser.
 
 ### 7. Deploy to Vercel
 

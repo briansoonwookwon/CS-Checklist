@@ -62,6 +62,7 @@ let lastCompletions = {}; // {item_id: 'YYYY-MM-DD'}
 let filterProcess = 'all';
 let filterEquipment = 'all';
 let filterPeriod = 'all';
+let uploadedPhotos = {};
 
 // DOM elements
 const dateInput = document.getElementById('date-input');
@@ -349,8 +350,19 @@ function renderChecklist() {
         const taskLabel = item.item || item.text || 'Task';
         const periodDays = item.periodDays || null;
         const periodLabel = formatPeriodLabel(periodDays);
-        
-        return `
+
+        const hasPhoto = uploadedPhotos[item.id];
+        const photoBtnText = hasPhoto ? '📷 Photo Added' : '📷 Upload Photo';
+        const photoBtnStyle = hasPhoto 
+            ? 'background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;' 
+            : 'background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;';
+
+        const hasNote = existingNote && existingNote.trim().length > 0;
+        // If a note exists, show the box. If not, hide it.
+        const noteDisplay = hasNote ? 'block' : 'none';
+        const noteBtnText = hasNote ? '📝 Edit Note' : '📝 Add Note';
+
+            return `
             <div class="checklist-item ${isChecked ? 'checked' : ''}" onclick="toggleCheck('${item.id}')">
                 <div class="checkbox"></div>
                 <div class="item-content">
@@ -365,12 +377,31 @@ function renderChecklist() {
                             Checked by: ${checkedByHtml}
                         </div>
                     ` : ''}
+                    
                     <div class="item-actions" onclick="event.stopPropagation();">
+                        <button 
+                            type="button"
+                            class="action-btn"
+                            style="${photoBtnStyle} margin-right: 8px;"
+                            onclick="triggerPhotoUpload('${item.id}')"
+                        >
+                            ${photoBtnText}
+                        </button>
+
+                        <button 
+                            type="button"
+                            class="action-btn"
+                            onclick="toggleNoteBox('${item.id}')"
+                        >
+                            ${noteBtnText}
+                        </button>
+
                         <textarea 
                             id="${noteInputId}" 
                             class="item-note-input" 
-                            rows="1" 
-                            placeholder="Add notes for this item (optional)..."
+                            rows="3" 
+                            style="display: ${noteDisplay};" 
+                            placeholder="Type your notes here..."
                             onblur="updateItemNote('${item.id}', this.value)"
                             onclick="event.stopPropagation();"
                         >${escapeHtml(existingNote)}</textarea>
@@ -484,6 +515,48 @@ function fillSelect(selectElement, values, defaultLabel, formatter) {
         selectElement.value = 'all';
     }
 }
+
+function triggerPhotoUpload(itemId) {
+    // Create a temporary hidden input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*'; // Only accept images
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // 1. Update local state with filename
+            uploadedPhotos[itemId] = file.name;
+            
+            // 2. Re-render to show the button state change
+            renderChecklist();
+            
+            // Optional: Log to console to prove it captured the file object
+            console.log(`Simulated upload for Item ${itemId}:`, file);
+        }
+    };
+    
+    // Open the file dialog
+    input.click();
+}
+
+function toggleNoteBox(itemId) {
+    const noteBox = document.getElementById(`note-input-${itemId}`);
+    if (noteBox) {
+        if (noteBox.style.display === 'none') {
+            noteBox.style.display = 'block';
+            noteBox.focus(); // Automatically focus cursor in the box
+        } else {
+            noteBox.style.display = 'none';
+        }
+    }
+}
+
+// Make it global
+window.toggleNoteBox = toggleNoteBox;
+
+// Expose to window so HTML onclick works
+window.triggerPhotoUpload = triggerPhotoUpload;
 
 // Make toggleCheck available globally
 window.toggleCheck = toggleCheck;

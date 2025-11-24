@@ -311,6 +311,40 @@ header h1 {
     align-items: center;
 }
 
+.item-note-input {
+    width: 100%;
+    min-height: 80px;      /* Nice big area */
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    resize: vertical;
+    background: #fafafa;
+    /* Note: We removed 'display: none' from here so JS can control it */
+}
+
+.item-note-input:focus {
+    outline: none;
+    border-color: #667eea; /* Highlights purple when typing */
+    background: white;
+}
+
+/* Style for the new Add Note button */
+.action-btn {
+    background-color: #f0f0f0; 
+    border: 1px solid #ccc; 
+    padding: 6px 12px; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background-color: #e0e0e0;
+    transform: translateY(-1px);
+}
+
 .photo-upload-btn {
     background: #667eea;
     border: none;

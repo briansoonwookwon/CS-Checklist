@@ -153,8 +153,6 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
                 statusText = '⚠️ Ongoing';
                 statusClass = 'ongoing';
             }
-            // --- NEW STATUS LOGIC END ---
-            
             // Generate user summary list (remains the same)
             // Determine how many items are due that day (checked + unchecked).
             const dueCount = (typeof dayData.total_due === 'number') ? dayData.total_due : totalItemsCount;
