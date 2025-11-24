@@ -357,15 +357,20 @@ function renderChecklist() {
             ? 'background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;' 
             : 'background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;';
 
+        const hasNote = existingNote && existingNote.trim().length > 0;
+        // If a note exists, show the box. If not, hide it.
+        const noteDisplay = hasNote ? 'block' : 'none';
+        const noteBtnText = hasNote ? '📝 Edit Note' : '📝 Add Note';
+
             return `
             <div class="checklist-item ${isChecked ? 'checked' : ''}" onclick="toggleCheck('${item.id}')">
                 <div class="checkbox"></div>
                 <div class="item-content">
                     <div class="item-text">${escapeHtml(taskLabel)}</div>
                     <div class="item-tags">
-                       <span class="tag tag-process">${escapeHtml(processLabel)}</span>
-                       <span class="tag tag-equipment">${escapeHtml(equipmentLabel)}</span>
-                       <span class="tag tag-period">${escapeHtml(periodLabel)}</span>
+                        <span class="tag tag-process">${escapeHtml(processLabel)}</span>
+                        <span class="tag tag-equipment">${escapeHtml(equipmentLabel)}</span>
+                        <span class="tag tag-period">${escapeHtml(periodLabel)}</span>
                     </div>
                     ${checkedByHtml.length > 0 ? `
                         <div class="item-meta">
@@ -376,17 +381,27 @@ function renderChecklist() {
                     <div class="item-actions" onclick="event.stopPropagation();">
                         <button 
                             type="button"
-                            style="${photoBtnStyle} font-size: 0.9em;"
+                            class="action-btn"
+                            style="${photoBtnStyle} margin-right: 8px;"
                             onclick="triggerPhotoUpload('${item.id}')"
                         >
                             ${photoBtnText}
                         </button>
-    
+
+                        <button 
+                            type="button"
+                            class="action-btn"
+                            onclick="toggleNoteBox('${item.id}')"
+                        >
+                            ${noteBtnText}
+                        </button>
+
                         <textarea 
                             id="${noteInputId}" 
                             class="item-note-input" 
-                            rows="2" 
-                            placeholder="Add notes..."
+                            rows="3" 
+                            style="display: ${noteDisplay};" 
+                            placeholder="Type your notes here..."
                             onblur="updateItemNote('${item.id}', this.value)"
                             onclick="event.stopPropagation();"
                         >${escapeHtml(existingNote)}</textarea>
@@ -524,6 +539,21 @@ function triggerPhotoUpload(itemId) {
     // Open the file dialog
     input.click();
 }
+
+function toggleNoteBox(itemId) {
+    const noteBox = document.getElementById(`note-input-${itemId}`);
+    if (noteBox) {
+        if (noteBox.style.display === 'none') {
+            noteBox.style.display = 'block';
+            noteBox.focus(); // Automatically focus cursor in the box
+        } else {
+            noteBox.style.display = 'none';
+        }
+    }
+}
+
+// Make it global
+window.toggleNoteBox = toggleNoteBox;
 
 // Expose to window so HTML onclick works
 window.triggerPhotoUpload = triggerPhotoUpload;

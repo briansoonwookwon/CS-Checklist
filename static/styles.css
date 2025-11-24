@@ -312,22 +312,37 @@ header h1 {
 }
 
 .item-note-input {
-    width: 100%;           /* Forces it to take the full width */
-    min-height: 80px;      /* Makes it tall enough for ~3-4 lines of text */
-    margin-top: 10px;      /* Adds space between the buttons and the text box */
-    padding: 10px;         /* Adds comfortable padding inside the box */
+    width: 100%;
+    min-height: 80px;      /* Nice big area */
+    margin-top: 10px;
+    padding: 10px;
     border: 1px solid #ddd;
-    border-radius: 8px;    /* Matches your existing rounded corners */
-    font-family: inherit;  /* Ensures it uses the same font as the rest of the app */
-    resize: vertical;      /* Allows the user to drag the bottom corner to resize */
-    background: #fafafa;   /* Slightly off-white background to distinguish it */
-    transition: border-color 0.2s;
+    border-radius: 8px;
+    resize: vertical;
+    background: #fafafa;
+    /* Note: We removed 'display: none' from here so JS can control it */
 }
 
 .item-note-input:focus {
     outline: none;
     border-color: #667eea; /* Highlights purple when typing */
     background: white;
+}
+
+/* Style for the new Add Note button */
+.action-btn {
+    background-color: #f0f0f0; 
+    border: 1px solid #ccc; 
+    padding: 6px 12px; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background-color: #e0e0e0;
+    transform: translateY(-1px);
 }
 
 .photo-upload-btn {
