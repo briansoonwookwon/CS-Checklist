@@ -31,196 +31,128 @@ function formatTime(timestamp) {
         // Formats to 12-hour time with AM/PM (e.g., 03:30 PM)
         return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     } catch (e) {
-        console.error("Invalid timestamp:", timestamp);
         return '';
     }
 }
 
 /**
- * Updates the local checklist state when a note is typed, ensuring it's ready to be saved on next action.
- * @param {string} itemId 
- * @param {string} note 
+ * Escapes HTML special characters in a string.
+ * @param {string} str - The string to escape.
+ * @returns {string} The escaped string.
  */
-function updateItemNote(itemId, note) {
-    if (!currentUser) return;
-
-    // Check if the item is already checked by the current user
-    if (checkedItems[itemId] && checkedItems[itemId][currentUser]) {
-        // Item is checked: update the note field in the local state
-        // This is now purely a LOCAL state update. The save happens via saveNoteOnly.
-        checkedItems[itemId][currentUser].note = note;
-        // NEW: If the user is currently checking this item, immediately save the checklist
-        // This makes the note "submission" feel instant when they blur the field.
-        submitChecklist(false); // Pass 'false' to skip the alert, making it a silent save
-    } 
-    // If the item is not checked, we won't save the note until the user checks the item.
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;")
+               .replace(/</g, "&lt;")
+               .replace(/>/g, "&gt;")
+               .replace(/"/g, "&quot;")
+               .replace(/'/g, "&#039;");
 }
 
-// Initialize
-let currentDate = getDateFromUrl() || getTodayDate(); // *** FIX: Prioritize date from URL ***
-let currentUser = localStorage.getItem('checklist_user') || '';
+
+// --- Global State ---
+let currentDate = getDateFromUrl() || getTodayDate();
 let checklistItems = [];
 let checkedItems = {};
-let lastCompletions = {}; // {item_id: 'YYYY-MM-DD'}
-let filterProcess = 'all';
-let filterEquipment = 'all';
-let filterPeriod = 'all';
-let uploadedPhotos = {};
+let currentUser = '';
+let photoCache = {}; // Cache to store photo URLs locally
 
-// DOM elements
-const dateInput = document.getElementById('date-input');
-const userInput = document.getElementById('user-input');
-const loadingDiv = document.getElementById('loading');
-const errorDiv = document.getElementById('error');
+// --- DOM Elements ---
 const checklistContainer = document.getElementById('checklist-container');
-const checklistDiv = document.getElementById('checklist');
-const totalItemsSpan = document.getElementById('total-items');
-const checkedCountSpan = document.getElementById('checked-count');
-const progressSpan = document.getElementById('progress');
-const processFilterSelect = document.getElementById('filter-process');
-const equipmentFilterSelect = document.getElementById('filter-equipment');
-const periodFilterSelect = document.getElementById('filter-period');
+const loadingSpinner = document.getElementById('loading-spinner');
+const userInput = document.getElementById('user-name-input');
+const checklistDateDisplay = document.getElementById('checklist-date');
 
-// Set today's date
-dateInput.value = currentDate;
-userInput.value = currentUser;
 
-// Event listeners
-dateInput.addEventListener('change', (e) => {
-    currentDate = e.target.value;
-    loadChecklist();
-});
+// --- UI Helpers ---
 
-userInput.addEventListener('change', (e) => {
-    // Trim and use a default value for interaction logic
-    currentUser = e.target.value.trim(); 
-    localStorage.setItem('checklist_user', currentUser);
-    renderChecklist();
-});
+function showLoading() {
+    loadingSpinner.style.display = 'block';
+}
 
-processFilterSelect.addEventListener('change', (e) => {
-    filterProcess = e.target.value;
-    renderChecklist();
-});
+function hideLoading() {
+    loadingSpinner.style.display = 'none';
+}
 
-equipmentFilterSelect.addEventListener('change', (e) => {
-    filterEquipment = e.target.value;
-    renderChecklist();
-});
-
-periodFilterSelect.addEventListener('change', (e) => {
-    filterPeriod = e.target.value;
-    renderChecklist();
-});
-
-// Load checklist items structure
-async function loadChecklistItems() {
-    try {
-        const response = await fetch(`${API_BASE}/checklist/items`);
-        const data = await response.json();
-        
-        if (data.items && data.items.length > 0) {
-            checklistItems = data.items;
-            populateFilters();
-        } else {
-            // If no items, show message
-            showError('No checklist items found. Please run the setup script first.');
-            return false;
-        }
-        return true;
-    } catch (error) {
-        console.error('Error loading checklist items:', error);
-        showError('Failed to load checklist items: ' + error.message);
-        return false;
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => {
+            errorDiv.style.display = 'none';
+        }, 5000);
     }
 }
 
-// Load checklist for current date
-async function loadChecklist() {
-    showLoading();
-    hideError();
-    
-    // First load the checklist items structure
-    const itemsLoaded = await loadChecklistItems();
-    if (!itemsLoaded) {
-        return;
+// Set up the current user from local storage
+document.addEventListener('DOMContentLoaded', () => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+        currentUser = storedUser;
+        userInput.value = storedUser;
     }
-    
-    // Load last completion dates and current date's checklist in parallel
-    try {
-        const [completionsResponse, checklistResponse] = await Promise.all([
-            fetch(`${API_BASE}/checklist/last-completions`),
-            fetch(`${API_BASE}/checklist?date=${currentDate}`)
-        ]);
-        
-        const completionsData = await completionsResponse.json();
-        lastCompletions = completionsData.lastCompletions || {};
-        
-        const checklistData = await checklistResponse.json();
-        checkedItems = checklistData.checked ? checklistData.checked : {};
-        
+
+    userInput.addEventListener('change', (e) => {
+        currentUser = e.target.value.trim();
+        if (currentUser) {
+            localStorage.setItem('currentUser', currentUser);
+        } else {
+            localStorage.removeItem('currentUser');
+        }
+        // Re-render to update UI elements based on current user (e.g., highlighting their checks)
         renderChecklist();
-        hideLoading();
+    });
+});
+
+// --- API Logic ---
+
+/**
+ * Fetches the checklist state for the current date from the server.
+ */
+async function loadChecklist() {
+    try {
+        showLoading();
+        const response = await fetch(`${API_BASE}/checklist/${currentDate}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            checklistItems = data.items || [];
+            checkedItems = data.checked || {};
+            
+            // Update the URL to include the date if it's missing (e.g., first load)
+            if (!getDateFromUrl() && currentDate !== getTodayDate()) {
+                 history.pushState(null, '', `?date=${currentDate}`);
+            }
+
+            // Update the displayed date
+            checklistDateDisplay.textContent = currentDate === getTodayDate() ? 
+                `Checklist for Today (${currentDate})` : 
+                `Checklist for ${currentDate}`;
+
+            renderChecklist();
+        } else {
+            throw new Error(data.error || 'Failed to load checklist');
+        }
     } catch (error) {
         console.error('Error loading checklist:', error);
         showError('Failed to load checklist: ' + error.message);
+    } finally {
         hideLoading();
     }
 }
 
-// Toggle check for an item
-async function toggleCheck(itemId) {
-    // If user name is empty, use 'anonymous' for tracking
-    const activeUser = currentUser || 'anonymous';
-
-    if (!currentUser || currentUser.trim() === '') {
-        alert('Please enter your name first before checking any item.');
-        userInput.focus();
-        return; // Stop the function execution
-    }
-
-    // --- NEW: Read the note from the item's textarea ---
-    // Get the element using the ID we defined in renderChecklist
-    const noteInput = document.getElementById(`note-input-${itemId}`);
-    // Capture the value. If the input doesn't exist (e.g., if the user hasn't fully implemented renderChecklist yet), default to an empty string.
-    const note = noteInput ? noteInput.value : '';
-    // --- END NEW ---
-
-    // Ensure structure exists
-    if (!checkedItems[itemId]) {
-        checkedItems[itemId] = {};
-    }
-
-    if (checkedItems[itemId][activeUser]) {
-        // Uncheck locally
-        // Note: This correctly removes the note along with the check status
-        delete checkedItems[itemId][activeUser];
-        if (Object.keys(checkedItems[itemId]).length === 0) {
-            delete checkedItems[itemId];
-        }
-    } else {
-        // Check locally with an ISO timestamp (server will replace with its timestamp on submit)
-        checkedItems[itemId][activeUser] = {
-            timestamp: new Date().toISOString(),
-            checked: true,
-            // --- NEW: Store the captured note in local state ---
-            note: note
-        };
-    }
-
-    // Do NOT update lastCompletions here; only update on submit when data is persisted
-    renderChecklist();
-}
-
-// Submit the entire checklist (persist checked items and photos) for the current date
-async function submitChecklist(showAlert = true) {
+/**
+ * Submits the complete local checklist state to the server.
+ */
+async function submitChecklist() {
     // Submission still requires a user name to avoid confusion in audit logs
     if (!currentUser) {
         alert('Please enter your name first before submitting the full checklist!');
         userInput.focus();
         return;
     }
-    
+
     const payload = {
         date: currentDate,
         items: checklistItems,
@@ -253,144 +185,191 @@ async function submitChecklist(showAlert = true) {
     }
 }
 
-// Render checklist
-function renderChecklist() {
-    if (checklistItems.length === 0) {
-        checklistDiv.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No checklist items available.</p>';
+
+/**
+ * Sends a toggle request to the server and updates the local state.
+ * @param {string} itemId 
+ */
+async function toggleCheck(itemId) {
+    if (!currentUser) {
+        alert('Please enter your name first.');
+        userInput.focus();
         return;
     }
-    
-    // Get today's actual date for comparison
-    const actualToday = getTodayDate();
 
-    // Sort items by period, process, equipment, then fallback to order
-    const sortedItems = [...checklistItems].sort((a, b) => {
-        const periodA = a.periodDays != null ? a.periodDays : Number.MAX_SAFE_INTEGER;
-        const periodB = b.periodDays != null ? b.periodDays : Number.MAX_SAFE_INTEGER;
-        if (periodA !== periodB) return periodA - periodB;
+    // Capture the note from the hidden input field before the toggle
+    const noteInput = document.getElementById(`note-input-${itemId}`);
+    const note = noteInput ? noteInput.value : '';
 
-        const processA = (a.process || '').toLowerCase();
-        const processB = (b.process || '').toLowerCase();
-        if (processA !== processB) return processA.localeCompare(processB);
+    const payload = {
+        date: currentDate,
+        item_id: itemId,
+        user: currentUser,
+        note: note // Include the note in the toggle request
+    };
 
-        const equipmentA = (a.equipment || '').toLowerCase();
-        const equipmentB = (b.equipment || '').toLowerCase();
-        if (equipmentA !== equipmentB) return equipmentA.localeCompare(equipmentB);
+    try {
+        showLoading();
+        const response = await fetch(`${API_BASE}/checklist/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
 
-        return (a.order || 0) - (b.order || 0);
-    });
+        const data = await response.json();
+        if (data.success) {
+            // Update local state with the new 'checked' map returned by the server
+            checkedItems = data.checked;
+            renderChecklist();
 
-    const filteredItems = sortedItems.filter(item => {
-        // Manual filter matches
-        const processMatches = filterProcess === 'all' || (item.process || item.category || 'General') === filterProcess;
-        const equipmentMatches = filterEquipment === 'all' || (item.equipment || 'General') === filterEquipment;
-        const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
-        const periodMatches = filterPeriod === 'all' || periodValue === filterPeriod;
-        
-        // Check if the item is already checked for the current date (by anyone)
-        const isAlreadyCheckedToday = checkedItems[item.id];
-        
-        // Rule 1 & 2: If checked OR viewing a past date, always show the item
-        if (isAlreadyCheckedToday || currentDate < actualToday) {
-            return processMatches && equipmentMatches && periodMatches;
-        }
-        
-        // Rule 3: If unchecked AND viewing today/future, apply periodic filter
-        
-        const periodDays = item.periodDays;
-        if (periodDays != null && periodDays > 0) {
-            const lastCompletionDate = lastCompletions[item.id];
-            
-            if (lastCompletionDate) {
-                // Calculate days since last completion
-                const lastDate = new Date(lastCompletionDate + 'T00:00:00');
-                const today = new Date(currentDate + 'T00:00:00');
-                const daysSince = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
-                
-                // Hide task if NOT enough days have passed
-                if (daysSince < periodDays) {
-                    return false; 
+            // The note box should be hidden if unchecked, or shown if checked and a note exists
+            if (data.checked[itemId] && data.checked[itemId][currentUser]) {
+                // Item is now checked, make sure the note box is visible if a note was entered
+                const noteInput = document.getElementById(`note-input-${itemId}`);
+                const saveBtn = document.getElementById(`save-note-btn-${itemId}`);
+                if (noteInput.value.trim() !== '') {
+                    noteInput.style.display = 'block';
+                    saveBtn.style.display = 'inline-block';
                 }
+            } else {
+                // Item is now unchecked, clear and hide the note box and button
+                const noteInput = document.getElementById(`note-input-${itemId}`);
+                if (noteInput) {
+                    noteInput.value = ''; // Clear the note
+                }
+                toggleNoteBox(itemId, true); // Force close
             }
+
+        } else {
+            throw new Error(data.error || 'Toggle failed');
         }
-        
-        // If it passed all checks (manual filters and periodic requirement or never done), show it.
-        return processMatches && equipmentMatches && periodMatches;
-    });
-    
-    if (filteredItems.length === 0) {
-        checklistDiv.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No items match the selected filters.</p>';
-        updateStats([]);
+    } catch (error) {
+        console.error('Error toggling checklist item:', error);
+        showError('Failed to toggle item: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+/**
+ * Saves the photo upload file to the server.
+ * @param {string} itemId 
+ * @param {File} file 
+ */
+async function savePhotoUpload(itemId, file) {
+    if (!currentUser) {
+        alert('Please enter your name first before uploading a photo.');
+        userInput.focus();
         return;
     }
 
-    checklistDiv.innerHTML = filteredItems.map(item => {
-        // Check if ANY user completed the task for visual checkmark
-        const isChecked = checkedItems[item.id]; 
-        
-        // 1. Determine the existing note for the current user
-        let existingNote = '';
-        const currentUserCheckData = checkedItems[item.id] ? checkedItems[item.id][currentUser] : null;
-        if (currentUserCheckData && currentUserCheckData.note) {
-            existingNote = currentUserCheckData.note;
+    // Check if the item is actually checked by the current user before uploading
+    if (!checkedItems[itemId] || !checkedItems[itemId][currentUser]) {
+        alert('You must check the item first before uploading a photo.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('date', currentDate);
+    formData.append('user', currentUser);
+
+    try {
+        showLoading();
+        const response = await fetch(`${API_BASE}/upload/${itemId}`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            // Update the photo cache and re-render the list
+            if (!photoCache[itemId]) photoCache[itemId] = {};
+            if (!photoCache[itemId][currentUser]) photoCache[itemId][currentUser] = {};
+            
+            photoCache[itemId][currentUser].photoUrl = data.photoUrl;
+            
+            // Re-render to show the new photo button/link
+            renderChecklist();
+            alert('Photo uploaded successfully!');
+
+        } else {
+            throw new Error(data.error || 'Photo upload failed');
         }
-        
-        const noteInputId = `note-input-${item.id}`; // Unique ID for the textarea
-        
-        // 2. Get an array of [user, data] pairs if item is checked
-        const checkedEntries = checkedItems[item.id] ? Object.entries(checkedItems[item.id]) : [];
+
+    } catch (error) {
+        console.error('Error uploading photo:', error);
+        showError('Failed to upload photo: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+
+// --- Rendering Logic ---
+
+/**
+ * Renders the checklist to the DOM.
+ */
+function renderChecklist() {
+    if (!checklistContainer) return;
+
+    if (checklistItems.length === 0) {
+        checklistContainer.innerHTML = '<p>No checklist items found for this date.</p>';
+        return;
+    }
+
+    // Render each checklist item
+    checklistContainer.innerHTML = checklistItems.map(item => {
+        const itemCheckData = checkedItems[item.id] || {};
+        const isChecked = Object.keys(itemCheckData).length > 0;
+        const currentUserCheckData = itemCheckData[currentUser];
         
         let checkedByHtml = '';
+        const checkedEntries = Object.entries(itemCheckData);
+
         if (checkedEntries.length > 0) {
             checkedByHtml = checkedEntries.map(([user, data]) => {
                 const timeStr = formatTime(data.timestamp); 
-                const noteDisplay = data.note ? `<span class="note-display">: ${escapeHtml(data.note)}</span>` : '';
-
+                
+                // --- MODIFIED: ADDED NOTE DISPLAY HERE ---
+                const noteDisplay = data.note ? `<span class="note-display"> (Note: ${escapeHtml(data.note)})</span>` : '';
+                
                 return `
                     <span class="checked-by">
-                        ${escapeHtml(user)} ${timeStr}
+                        ${escapeHtml(user)} ${timeStr}${noteDisplay}
                     </span>
-
-                    <span class="notes">
-                        ${escapeHtml(user)} ${noteDisplay}
-                    </span>
-
                 `;
             }).join(', '); // Join multiple checkers with a comma and space
         }
+
+        // Photo Button Logic
+        const photoUrl = currentUserCheckData ? currentUserCheckData.photoUrl : null;
+        const photoBtnText = photoUrl ? 'View/Change Photo' : 'Upload Photo';
+        const photoBtnStyle = photoUrl ? 'background-color: #28a745; color: white;' : '';
+
+        // Note Logic
+        const existingNote = currentUserCheckData ? (currentUserCheckData.note || '') : '';
+        const noteInputId = `note-input-${item.id}`;
+        const hasNote = existingNote.trim() !== '';
         
-        const processLabel = item.process || item.category || 'General';
-        const equipmentLabel = item.equipment || 'N/A';
-        const taskLabel = item.item || item.text || 'Task';
-        const periodDays = item.periodDays || null;
-        const periodLabel = formatPeriodLabel(periodDays);
+        // Note box is visible if a note exists or if the user is typing/has typed one
+        const noteDisplay = (hasNote || (currentUserCheckData && !currentUserCheckData.checked)) ? 'block' : 'none';
 
-        const hasPhoto = uploadedPhotos[item.id];
-        const photoBtnText = hasPhoto ? '📷 Photo Added' : '📷 Upload Photo';
-        const photoBtnStyle = hasPhoto 
-            ? 'background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;' 
-            : 'background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;';
+        // Variables for the new Save Note Button
+        const canSave = (checkedItems[item.id] && checkedItems[item.id][currentUser]);
+        const saveBtnId = `save-note-btn-${item.id}`;
+        const saveBtnDisplay = (noteDisplay === 'block' && canSave) ? 'inline-block' : 'none';
 
-        const hasNote = existingNote && existingNote.trim().length > 0;
-        // If a note exists, show the box. If not, hide it.
-        const noteDisplay = hasNote ? 'block' : 'none';
-        const noteBtnText = hasNote ? '📝 Edit Note' : '📝 Add Note';
 
-            return `
+        return `
             <div class="checklist-item ${isChecked ? 'checked' : ''}" onclick="toggleCheck('${item.id}')">
                 <div class="checkbox"></div>
                 <div class="item-content">
-                    <div class="item-text">${escapeHtml(taskLabel)}</div>
-                    <div class="item-tags">
-                        <span class="tag tag-process">${escapeHtml(processLabel)}</span>
-                        <span class="tag tag-equipment">${escapeHtml(equipmentLabel)}</span>
-                        <span class="tag tag-period">${escapeHtml(periodLabel)}</span>
-                    </div>
-                    ${checkedByHtml.length > 0 ? `
-                        <div class="item-meta">
-                            Checked by: ${checkedByHtml}
-                        </div>
-                    ` : ''}
+                    <div class="item-title">${escapeHtml(item.name)}</div>
+                    ${isChecked ? `<div class="checked-info">${checkedByHtml}</div>` : ''}
                     
                     <div class="item-actions" onclick="event.stopPropagation();">
                         <button 
@@ -419,134 +398,67 @@ function renderChecklist() {
                             onblur="updateItemNote('${item.id}', this.value)"
                             onclick="event.stopPropagation();"
                         >${escapeHtml(existingNote)}</textarea>
+                        
+                        <button
+                            id="${saveBtnId}"
+                            type="button"
+                            class="action-btn save-note-btn"
+                            style="display: ${saveBtnDisplay}; margin-top: 5px; background-color: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;"
+                            onclick="saveNoteOnly('${item.id}')"
+                        >
+                            💾 Save Note
+                        </button>
                     </div>
                 </div>
             </div>
         `;
     }).join('');
-    
-    updateStats(filteredItems);
 }
 
-// Update statistics
-function updateStats(visibleItems) {
-    const total = visibleItems.length;
-    // Update stats to reflect checks by ANY user
-    const checked = visibleItems.filter(item =>
-        checkedItems[item.id] // Check if the item ID exists in checkedItems (meaning any user checked it)
-    ).length;
 
-    const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
-    
-    totalItemsSpan.textContent = total;
-    checkedCountSpan.textContent = checked;
-    progressSpan.textContent = progress + '%';
+// --- Action Handlers ---
+
+/**
+ * Updates the local checklist state when a note is typed, ensuring it's ready to be saved on next action.
+ * @param {string} itemId 
+ * @param {string} note 
+ */
+function updateItemNote(itemId, note) {
+    if (!currentUser) return;
+
+    // Check if the item is already checked by the current user
+    if (checkedItems[itemId] && checkedItems[itemId][currentUser]) {
+        // Item is checked: update the note field in the local state
+        // This is purely a LOCAL state update. The save happens via saveNoteOnly or toggleCheck.
+        checkedItems[itemId][currentUser].note = note;
+    } 
+    // If the item is not checked, we won't save the note until the user checks the item.
+    // The note will still be in the textarea for the next toggle action.
 }
 
-// Utility functions
-function showLoading() {
-    loadingDiv.style.display = 'block';
-    checklistContainer.style.display = 'none';
-    errorDiv.style.display = 'none';
-}
-
-function hideLoading() {
-    loadingDiv.style.display = 'none';
-    checklistContainer.style.display = 'block';
-}
-
-function showError(message) {
-    errorDiv.style.display = 'block';
-    document.getElementById('error-message').textContent = message;
-    checklistContainer.style.display = 'none';
-}
-
-function hideError() {
-    errorDiv.style.display = 'none';
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function formatPeriodLabel(periodDays) {
-    if (!periodDays || Number.isNaN(periodDays)) {
-        return 'As needed';
-    }
-    if (periodDays === 1) {
-        return 'Daily';
-    }
-    if (periodDays === 7) {
-        return 'Weekly';
-    }
-    if (periodDays === 30) {
-        return 'Monthly';
-    }
-    return `Every ${periodDays} days`;
-}
-
-function populateFilters() {
-    const processSet = new Set();
-    const equipmentSet = new Set();
-    const periodSet = new Set();
-
-    checklistItems.forEach(item => {
-        processSet.add(item.process || item.category || 'General');
-        equipmentSet.add(item.equipment || 'General');
-        const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
-        periodSet.add(periodValue);
-    });
-
-    fillSelect(processFilterSelect, Array.from(processSet).sort(), 'All processes');
-    fillSelect(equipmentFilterSelect, Array.from(equipmentSet).sort(), 'All equipment');
-
-    const periodOptions = Array.from(periodSet).sort((a, b) => {
-        const numA = a === 'custom' ? Number.MAX_SAFE_INTEGER : parseInt(a, 10);
-        const numB = b === 'custom' ? Number.MAX_SAFE_INTEGER : parseInt(b, 10);
-        return numA - numB;
-    });
-    fillSelect(periodFilterSelect, periodOptions, 'All frequencies', value => {
-        if (value === 'custom') {
-            return 'Custom';
-        }
-        return formatPeriodLabel(parseInt(value, 10));
-    });
-}
-
-function fillSelect(selectElement, values, defaultLabel, formatter) {
-    const currentValue = selectElement.value || 'all';
-    selectElement.innerHTML = `<option value="all">${defaultLabel}</option>`;
-    values.forEach(value => {
-        const label = formatter ? formatter(value) : value;
-        selectElement.innerHTML += `<option value="${value}">${escapeHtml(label)}</option>`;
-    });
-
-    if ([...selectElement.options].some(opt => opt.value === currentValue)) {
-        selectElement.value = currentValue;
-    } else {
-        selectElement.value = 'all';
-    }
-}
-
+/**
+ * Triggers the file upload dialog and handles the photo upload process.
+ * @param {string} itemId 
+ */
 function triggerPhotoUpload(itemId) {
-    // Create a temporary hidden input
+    const photoUrl = checkedItems[itemId] && checkedItems[itemId][currentUser] ? checkedItems[itemId][currentUser].photoUrl : null;
+    
+    // If a photo exists, offer to view it first
+    if (photoUrl) {
+        if (confirm('A photo already exists. Do you want to view it? (Cancel to upload a new one)')) {
+            window.open(photoUrl, '_blank');
+            return;
+        }
+    }
+
+    // Create an invisible file input element
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*'; // Only accept images
-    
-    input.onchange = (e) => {
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            // 1. Update local state with filename
-            uploadedPhotos[itemId] = file.name;
-            
-            // 2. Re-render to show the button state change
-            renderChecklist();
-            
-            // Optional: Log to console to prove it captured the file object
-            console.log(`Simulated upload for Item ${itemId}:`, file);
+            await savePhotoUpload(itemId, file);
         }
     };
     
@@ -554,15 +466,28 @@ function triggerPhotoUpload(itemId) {
     input.click();
 }
 
-function toggleNoteBox(itemId) {
+function toggleNoteBox(itemId, forceClose = false) {
     const noteBox = document.getElementById(`note-input-${itemId}`);
-    if (noteBox) {
-        if (noteBox.style.display === 'none') {
-            noteBox.style.display = 'block';
-            noteBox.focus(); // Automatically focus cursor in the box
-        } else {
-            noteBox.style.display = 'none';
+    const saveBtn = document.getElementById(`save-note-btn-${itemId}`); // Get the new button
+    
+    if (!noteBox || !saveBtn) return; // Check if elements exist
+
+    // Force close or if currently visible
+    if (forceClose || noteBox.style.display === 'block') {
+        // Hide
+        noteBox.style.display = 'none';
+        saveBtn.style.display = 'none';
+    } else {
+        // Show
+        noteBox.style.display = 'block';
+        
+        // Only show the save button if the item is checked by the current user
+        const canSave = (checkedItems[itemId] && checkedItems[itemId][currentUser]);
+        if(canSave) {
+            saveBtn.style.display = 'inline-block'; // Show the button next to the box
         }
+
+        noteBox.focus(); // Automatically focus cursor in the box
     }
 }
 
@@ -592,11 +517,8 @@ async function saveNoteOnly(itemId) {
     // Call submitChecklist, which sends the entire local state, including the note
     await submitChecklist();
     
-    // Optional: Hide the note box after saving
-    toggleNoteBox(itemId, true); // Pass true to force close
-
-    // Re-render to show the note instantly in the checked-by line
-    renderChecklist(); 
+    // Hide the note box after saving, but not the button (toggleNoteBox handles both)
+    toggleNoteBox(itemId, true); 
 }
 
 // Make it global
@@ -625,10 +547,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (summaryNavBtn) {
         summaryNavBtn.addEventListener('click', () => {
             // Redirect the user to the summary page
-            window.location.href = 'summary.html';
+            window.location.href = `/summary.html`;
         });
     }
-});
 
-// Load checklist on page load
-loadChecklist();
+    // Handle date navigation
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
+
+    function navigateDate(days) {
+        try {
+            const current = new Date(currentDate);
+            current.setDate(current.getDate() + days);
+            
+            // Format to YYYY-MM-DD
+            const newDate = new Date(current.getTime() - (current.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            
+            // Update the URL and reload
+            window.location.href = `?date=${newDate}`;
+
+        } catch (e) {
+            console.error("Date navigation error:", e);
+        }
+    }
+
+    if (prevDayBtn) {
+        prevDayBtn.addEventListener('click', () => navigateDate(-1));
+    }
+    if (nextDayBtn) {
+        nextDayBtn.addEventListener('click', () => navigateDate(1));
+    }
+    
+    // Initial load
+    loadChecklist();
+});

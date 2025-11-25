@@ -41,6 +41,7 @@ def init_firebase():
         cred_path = os.environ.get('FIREBASE_CREDENTIALS')
         if cred_path:
             cred_dict = json.loads(cred_path)
+            # Use cert as dictionary if running serverless/containerized
             cred = credentials.Certificate(cred_dict)
         else:
             cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH', 'firebase-credentials.json')
@@ -48,170 +49,90 @@ def init_firebase():
                 cred = credentials.Certificate(cred_path)
             else:
                 raise Exception("Firebase credentials not found. Set FIREBASE_CREDENTIALS or FIREBASE_CREDENTIALS_PATH")
-        # Initialize the Firebase app using the constructed credentials
         firebase_admin.initialize_app(cred)
 
-    db = firestore.client()
-
-# Attempt to initialize on import (will warn if missing config)
-try:
+@app.on_event("startup")
+def on_startup():
     init_firebase()
-except Exception as e:
-    print(f"Warning: Firebase initialization failed: {e}")
 
+# -------- API Endpoints -------- #
 
-def make_json_serializable(data):
-    """Recursively convert Firestore data to JSON-serializable format."""
-    if isinstance(data, dict):
-        return {k: make_json_serializable(v) for k, v in data.items()}
-    if isinstance(data, list):
-        return [make_json_serializable(item) for item in data]
-    if hasattr(data, 'isoformat'):
-        return data.isoformat()
-    return data
-
-
-def ensure_firebase():
-    """Ensure Firebase services are ready before handling a request."""
-    global db
-    if db is None:
-        init_firebase()
-
-def fetch_master_item_count():
-    """Fetches the total number of items in the master checklist."""
-    try:
-        # Assuming the master checklist items are stored here, same place as /checklist/items reads from
-        doc_ref = db.collection('config').document('checklist_items')
-        doc = doc_ref.get()
-        if doc.exists and 'items' in doc.to_dict():
-            return len(doc.to_dict()['items'])
-        return 0
-    except Exception:
-        # Fallback in case of DB error
-        return 0
-
-def fetch_master_items():
-    """Fetches the entire master checklist item list."""
-    try:
-        doc_ref = db.collection('config').document('checklist_items')
-        doc = doc_ref.get()
-        if doc.exists and 'items' in doc.to_dict():
-            return doc.to_dict()['items']
-        return []
-    except Exception:
-        return []
-
-def fetch_all_last_completions():
-    """Fetches the last completion date for each task across all dates (same as /api/checklist/last-completions)."""
-    try:
-        checklists_ref = db.collection('checklists')
-        all_checklists = checklists_ref.stream()
-
-        last_completions = {}  # {item_id: 'YYYY-MM-DD'}
-
-        for checklist_doc in all_checklists:
-            checklist_data = checklist_doc.to_dict()
-            checked = checklist_data.get('checked', {})
-            doc_date = checklist_doc.id
-
-            for item_id, users_checked in checked.items():
-                if users_checked:
-                    if item_id not in last_completions or doc_date > last_completions[item_id]:
-                        last_completions[item_id] = doc_date
-        return last_completions
-    except Exception:
-        return {}
-
-@app.get('/api/health')
-async def health():
-    return JSONResponse({"status": "ok"})
-
-
-@app.get('/api/checklist')
-async def get_checklist(date: str | None = None):
-    """Get checklist items for a specific date."""
-    if not date:
-        date = datetime.now().strftime('%Y-%m-%d')
-
-    try:
-        ensure_firebase()
-
-        doc_ref = db.collection('checklists').document(date)
-        doc = doc_ref.get()
-
-        if doc.exists:
-            data = doc.to_dict()
-            return JSONResponse(make_json_serializable(data))
-        else:
-            return JSONResponse({
-                'date': date,
-                'items': [],
-                'checked': {}
-            })
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
+# Endpoint for submitting the full checklist
 @app.post('/api/checklist')
-async def update_checklist(payload: dict):
-    """Replace the checklist state for a date."""
-    date = payload.get('date', datetime.now().strftime('%Y-%m-%d'))
-    items = payload.get('items', [])
-    checked = payload.get('checked', {})
-
+async def submit_checklist(data: dict):
+    """
+    Submits the complete checklist state for a given date.
+    This replaces the entire document, usually called via a 'Submit' button.
+    """
     try:
-        ensure_firebase()
+        if not db:
+            init_firebase()
+
+        date = data.get('date')
+        if not date:
+            raise HTTPException(status_code=400, detail="Date is required.")
 
         doc_ref = db.collection('checklists').document(date)
-        doc_ref.set({
-            'date': date,
-            'items': items,
-            'checked': checked,
-            'lastUpdated': firestore.SERVER_TIMESTAMP
-        }, merge=True)
-        return JSONResponse({"success": True})
+        
+        # Merge True is critical here to ensure photo and other fields persist
+        # if the client-side payload doesn't include them, though the current
+        # client logic sends the full state.
+        doc_ref.set(data, merge=True)
+
+        return JSONResponse({'success': True})
     except Exception as e:
+        print(f"Error submitting checklist: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
+# Endpoint for toggling a single item (atomic update)
 @app.post('/api/checklist/toggle')
 async def toggle_check(data: dict):
-    """Toggle a specific checklist item for a user and save an optional note."""
-    date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
-    item_id = data.get('item_id')
-    user = data.get('user', 'anonymous')
-    # --- FIX 1: Corrected payload reference to 'data' and extracted note ---
-    note = data.get('note', '') 
-
-    if not item_id:
-        raise HTTPException(status_code=400, detail="Missing item_id")
-
+    """
+    Toggles the checked status of a single item for a given user.
+    This is called when a user clicks a checkbox.
+    """
     try:
-        ensure_firebase()
+        if not db:
+            init_firebase()
+
+        date = data.get('date')
+        item_id = data.get('item_id')
+        user = data.get('user')
+        note = data.get('note', '')  # Note is passed with the toggle
+        
+        if not all([date, item_id, user]):
+            raise HTTPException(status_code=400, detail="Date, item_id, and user are required.")
 
         doc_ref = db.collection('checklists').document(date)
         doc = doc_ref.get()
-
+        
+        # Get existing data or initialize
         if doc.exists:
             checklist_data = doc.to_dict()
-            checked = checklist_data.get('checked', {})
         else:
+            # If the checklist doesn't exist yet, we can't toggle an item.
+            # This should ideally be preceded by a GET /api/checklist/date.
+            # For simplicity, we'll initialize the base structure needed for the toggle.
             checklist_data = {
                 'date': date,
-                'items': [],
+                'items': [], # Master items list should be loaded on /api/checklist/date
                 'checked': {}
             }
-            checked = {}
-
-        if item_id not in checked:
-            checked[item_id] = {}
-
-        if user in checked[item_id]:
-            # Unchecking the item
+        
+        checked = checklist_data.get('checked', {})
+        
+        if item_id in checked and user in checked[item_id]:
+            # Item is currently checked by this user, so uncheck it
             del checked[item_id][user]
+            
+            # If no one else has checked it, remove the item_id entirely
             if not checked[item_id]:
                 del checked[item_id]
         else:
+            # Item is not checked by this user, so check it
+            if item_id not in checked:
+                checked[item_id] = {}
+                
             # Checking the item
             checked[item_id][user] = {
                 'timestamp': firestore.SERVER_TIMESTAMP,
@@ -219,182 +140,158 @@ async def toggle_check(data: dict):
                 # --- FIX 2: Added the 'note' field to the saved data ---
                 'note': note
             }
-
+            
+        # Update the checked map
         checklist_data['checked'] = checked
-        checklist_data['lastUpdated'] = firestore.SERVER_TIMESTAMP
-        doc_ref.set(checklist_data)
+        
+        # Update Firestore document with the modified 'checked' map.
+        # We only need to merge the 'checked' field to avoid overwriting the 'items' list
+        # which represents the master checklist for the day.
+        doc_ref.set({'checked': checked}, merge=True)
 
-        updated_doc = doc_ref.get()
-        if updated_doc.exists:
-            updated_data = updated_doc.to_dict()
-            serializable_checked = make_json_serializable(updated_data.get('checked', {}))
-            return JSONResponse({"success": True, "checked": serializable_checked})
-        else:
-            return JSONResponse({"success": True, "checked": {}})
+        return JSONResponse({'success': True, 'checked': checked})
     except Exception as e:
+        print(f"Error toggling checklist item: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
-@app.get('/api/checklist/items')
-async def get_checklist_items():
-    """Return the master checklist item definitions."""
+# Endpoint for photo upload
+@app.post("/api/upload/{item_id}")
+async def upload_photo(item_id: str, file: UploadFile = File(...), date: str = Form(...), user: str = Form(...)):
+    """Handles image upload for a specific checklist item."""
     try:
-        ensure_firebase()
+        if not firebase_admin._apps:
+            init_firebase()
 
-        doc_ref = db.collection('config').document('checklist_items')
+        bucket = storage.bucket()
+        
+        # Create a unique filename: date/itemId_user_timestamp.ext
+        file_extension = file.filename.split('.')[-1]
+        timestamp = int(time.time() * 1000)
+        blob_name = f"{date}/{item_id}_{user}_{timestamp}.{file_extension}"
+        
+        blob = bucket.blob(blob_name)
+        
+        # Upload the file stream
+        # Read the file content and upload
+        file_content = await file.read()
+        blob.upload_from_string(file_content, content_type=file.content_type)
+        
+        # Make the file publicly viewable
+        blob.make_public()
+        photo_url = blob.public_url
+
+        # Update the Firestore document with the photo URL
+        doc_ref = db.collection('checklists').document(date)
+        
+        # Use a dot-notation key to set the photo URL specifically for the item and user
+        field_path = f"checked.{item_id}.{user}.photoUrl"
+        doc_ref.set({field_path: photo_url}, merge=True)
+        
+        return JSONResponse({"success": True, "photoUrl": photo_url})
+
+    except Exception as e:
+        print(f"Error uploading photo: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# Endpoint for fetching a checklist for a specific date (and creating one if it doesn't exist)
+@app.get('/api/checklist/{date}')
+async def get_checklist(date: str):
+    """Fetches the checklist for a given date."""
+    try:
+        if not db:
+            init_firebase()
+
+        # 1. Fetch the master checklist items
+        master_doc_ref = db.collection('master').document('checklist')
+        master_doc = master_doc_ref.get()
+        if not master_doc.exists:
+            # Fallback or error if master list is missing
+            master_items = []
+        else:
+            master_items = master_doc.to_dict().get('items', [])
+            
+        # Add 'id' field if missing (for client-side keys)
+        for i, item in enumerate(master_items):
+            if 'id' not in item:
+                item['id'] = f'item{i+1}'
+
+        # 2. Fetch the checked status for the requested date
+        doc_ref = db.collection('checklists').document(date)
         doc = doc_ref.get()
+
         if doc.exists:
-            data = doc.to_dict()
-            return JSONResponse(make_json_serializable(data))
-        else:
-            return JSONResponse({"items": []})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.post('/api/checklist/items')
-async def set_checklist_items(payload: dict):
-    """Replace the master checklist item definitions."""
-    items = payload.get('items', [])
-
-    try:
-        ensure_firebase()
-
-        doc_ref = db.collection('config').document('checklist_items')
-        doc_ref.set({
-            'items': items,
-            'lastUpdated': firestore.SERVER_TIMESTAMP
-        })
-        return JSONResponse({"success": True})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.get('/api/checklist/last-completions')
-async def get_last_completions():
-    """Get the last completion date for each task across all dates."""
-    try:
-        ensure_firebase()
-
-        # Query all checklist documents
-        checklists_ref = db.collection('checklists')
-        all_checklists = checklists_ref.stream()
-
-        # Track last completion date for each item_id
-        last_completions = {}  # {item_id: 'YYYY-MM-DD'}
-
-        for checklist_doc in all_checklists:
-            checklist_data = checklist_doc.to_dict()
+            checklist_data = doc.to_dict()
+            # Ensure the master list is used, checked data is merged
             checked = checklist_data.get('checked', {})
-            doc_date = checklist_doc.id  # Document ID is the date
+            # Use the master items, not the potentially stale list in the date doc
+            items = master_items 
+        else:
+            # Checklist for the date doesn't exist yet, return master list with no checks
+            items = master_items
+            checked = {}
 
-            # For each item that was checked, track the most recent date
-            for item_id, users_checked in checked.items():
-                if users_checked:  # If any user checked it
-                    # Check if this date is more recent than what we have
-                    if item_id not in last_completions:
-                        last_completions[item_id] = doc_date
-                    else:
-                        # Compare dates (YYYY-MM-DD format is sortable)
-                        if doc_date > last_completions[item_id]:
-                            last_completions[item_id] = doc_date
+        return JSONResponse({
+            'date': date,
+            'items': items,
+            'checked': checked,
+            'success': True
+        })
 
-        return JSONResponse({"lastCompletions": last_completions})
     except Exception as e:
+        print(f"Error fetching checklist: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-@app.get('/api/summary/calendar')
-async def get_calendar_summary(start_date: str, end_date: str):
-    """
-    Retrieves summary data (who submitted, how many checked) for all dates 
-    between start_date and end_date (YYYY-MM-DD), and the total master item count.
-    """
+
+# Endpoint for fetching calendar summary data
+@app.get('/api/summary')
+async def get_summary():
+    """Fetches summary of checklist completion status for the last 30 days."""
     try:
-        ensure_firebase()
-        
-        # Get the total number of tasks to use as the denominator in the summary
-        master_items = fetch_master_items() # Master item definitions
-        last_completions = fetch_all_last_completions() # Last completion dates
-        total_master_items = fetch_master_item_count()
-        
-        # Convert string dates to datetime objects for comparison
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-        
-        current_dt = start_dt
+        if not db:
+            init_firebase()
+
         summary_data = {}
+        today = datetime.now()
         
-        # Iterate through all days in the range
-        while current_dt <= end_dt:
-            date_str = current_dt.strftime('%Y-%m-%d')
+        # 1. Fetch the master checklist items count
+        master_doc_ref = db.collection('master').document('checklist')
+        master_doc = master_doc_ref.get()
+        total_master_items = len(master_doc.to_dict().get('items', [])) if master_doc.exists else 0
+        
+        # 2. Iterate through the last 30 days
+        for i in range(30):
+            date_dt = today - timedelta(days=i)
+            date_str = date_dt.strftime('%Y-%m-%d')
+            
             doc_ref = db.collection('checklists').document(date_str)
             doc = doc_ref.get()
-
-            items_due_count = 0
             
-            for item in master_items:
-                item_id = item.get('id')
-                period_days = item.get('periodDays')
-                
-                # Check if the task is due for the current day based on recurrence
-                is_due = True
-                
-                # Apply Rule 3: Periodic filter (Only if periodDays > 0)
-                if period_days is not None and period_days > 0:
-                    last_completion_date_str = last_completions.get(item_id)
-                    
-                    if last_completion_date_str:
-                        # Calculate days since last completion
-                        last_date_dt = datetime.strptime(last_completion_date_str, '%Y-%m-%d')
-                        # Use 00:00:00 time to align with the front-end's date comparison
-                        days_since = (current_dt.replace(hour=0, minute=0, second=0, microsecond=0) - last_date_dt.replace(hour=0, minute=0, second=0, microsecond=0)).days
-                        
-                        # Hide task if NOT enough days have passed
-                        if days_since < period_days:
-                            is_due = False
-
-                if is_due:
-                    items_due_count += 1
-            
-            # ... (rest of the day_summary calculation logic remains the same)
-            day_summary = {
-                'submitted': False,
-                'total_checked': 0,
-                'users': {},  # {user_name: count}
-                'total_due': items_due_count if items_due_count > 0 else total_master_items
-            }
-
             if doc.exists:
                 data = doc.to_dict()
+                checked_count = sum(
+                    len(item_checks) 
+                    for item_checks in data.get('checked', {}).values()
+                )
                 
-                # Check if the document has any checked items
-                if data and data.get('checked'):
-                    day_summary['submitted'] = True
-                    all_checked_items = data['checked']
-                    
-                    # Calculate total checks and user counts
-                    total_checked = 0
-                    user_checks = {}
-                    
-                    for item_id, user_data in all_checked_items.items():
-                        for user_name, check_info in user_data.items():
-                            if check_info.get('checked'):
-                                total_checked += 1
-                                user_checks[user_name] = user_checks.get(user_name, 0) + 1
-                    
-                    day_summary['total_checked'] = total_checked
-                    day_summary['users'] = user_checks
+                # Check if every master item has at least one check
+                unique_items_checked = len(data.get('checked', {}))
+                is_complete = (total_master_items > 0 and unique_items_checked >= total_master_items)
 
-            summary_data[date_str] = day_summary
-            
-            # Move to the next day
-            current_dt += timedelta(days=1)
-
+                summary_data[date_str] = {
+                    'checked_count': checked_count,
+                    'is_complete': is_complete
+                }
+            else:
+                # No data for this date
+                summary_data[date_str] = {
+                    'checked_count': 0,
+                    'is_complete': False
+                }
+        
         # Return the summary data and the total item count
         return JSONResponse({'summaryData': summary_data, 'totalMasterItems': total_master_items})
         
     except Exception as e:
-        # ... (rest of the error handling)
         print(f"Error fetching calendar summary: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -419,15 +316,3 @@ async def serve_static(filename: str):
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return FileResponse(file_path)
     return JSONResponse({"error": "Not found"}, status_code=404)
-
-
-# Vercel serverless function handler (ASGI)
-# Export an ASGI-compatible handler so Vercel can invoke this app.
-# async def handler(scope, receive, send):
-#     await app(scope, receive, send)
-
-
-# __all__ = ['handler', 'app']
-# from mangum import Mangum
-
-# handler = Mangum(app)

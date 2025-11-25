@@ -598,3 +598,18 @@ header h1 {
     font-weight: 600; /* Optional: Makes the text bolder for better visibility */
     padding: 0 10px; /* Optional: Adds some horizontal padding */
 }
+
+.note-display {
+    /* Style for the note text displayed under the item name */
+    font-style: italic;
+    color: #6c757d; /* A subtle grey */
+    margin-left: 5px;
+    font-size: 0.9em;
+}
+
+.save-note-btn {
+    /* Ensure the button doesn't take up full width in the action bar */
+    display: inline-block;
+    /* You may need to adjust these if your existing buttons look different */
+    margin-left: 10px; 
+}
