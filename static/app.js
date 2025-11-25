@@ -541,7 +541,50 @@ function triggerPhotoUpload(itemId) {
         if (file) {
             // 1. Update local state with filename
             uploadedPhotos[itemId] = file.name;
-            
+            // --- START NEW CODE TO DISPLAY PHOTO ---
+
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                // The result is the base64 encoded image string (Data URL)
+                const imageUrl = event.target.result;
+
+                // Create and insert an <img> element for preview
+                const imagePreviewId = `photo-preview-${itemId}`;
+                let previewElement = document.getElementById(imagePreviewId);
+                
+                // Find the specific item's action div to append the image to
+                const itemDiv = document.querySelector(`.checklist-item[onclick*="'${itemId}'"]`);
+                const contentDiv = itemDiv ? itemDiv.querySelector('.item-content') : null;
+
+                if (contentDiv) {
+                    if (!previewElement) {
+                        previewElement = document.createElement('img');
+                        previewElement.id = imagePreviewId;
+                        previewElement.className = 'photo-preview';
+                        
+                        // Basic styling to ensure visibility
+                        previewElement.style.maxWidth = '100px'; 
+                        previewElement.style.maxHeight = '100px';
+                        previewElement.style.marginTop = '10px';
+                        previewElement.style.marginBottom = '10px';
+                        previewElement.style.borderRadius = '4px';
+                        previewElement.style.border = '1px solid #ccc';
+                        previewElement.style.display = 'block';
+
+                        // Append the new image preview to the item-content div
+                        contentDiv.appendChild(previewElement); 
+                    }
+                    
+                    // Set the image source
+                    previewElement.src = imageUrl;
+                } else {
+                    console.error('Could not find checklist item element for preview.');
+                }
+            };
+
+            // Read the file as a Data URL (base64)
+            reader.readAsDataURL(file);            
             // 2. Re-render to show the button state change
             renderChecklist();
             
