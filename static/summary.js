@@ -130,6 +130,28 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
         let elementTag = isClickable ? 'a' : 'div';
         const linkAttribute = isClickable ? `href="index.html?date=${dateStr}"` : '';
 
+        const periodMap = {
+            "1": "Daily",
+            "3": "Bi-Weekly", // Example based on period '3' being present
+            "7": "Weekly",
+            "30": "Monthly",
+            "90": "Quarterly",
+            "120": "Every three Month"
+
+        };
+        const summaryLines = [];
+        for (const periodKey in dayData.period_checks) {
+            const checkedCount = dayData.period_checks[periodKey] || 0;
+            const dueCount = dayData.period_due_counts[periodKey] || 0; 
+            const periodName = periodMap[periodKey] || `Period ${periodKey}`;
+        
+            // Create the summary string and wrap it in a <p> tag
+            const summaryString = `<p>${periodName}: ${checkedCount}/${dueCount}</p>`;
+            
+            summaryLines.push(summaryString);
+        }
+        const periodSummaries = summaryLines.join('\n');
+
         if (dayData) {
             dayClass += ' has-data';
             
@@ -153,20 +175,15 @@ function renderCalendar(summaryData, totalItemsCount) { // UPDATED SIGNATURE
                 statusText = '⚠️ Ongoing';
                 statusClass = 'ongoing';
             }
-            // --- NEW STATUS LOGIC END ---
-            const dueCount = (typeof dayData.total_due === 'number') ? dayData.total_due : totalItemsCount;
-            
-            // Generate user summary list (remains the same)
-            const userSummaries = Object.entries(dayData.users)
-                .map(([user, count]) => `<li>${user}: ${count} / ${dueCount} checked</li>`)
-                .join('');
             
             // Note: The dayClass += ' submitted' from the old logic is now integrated into Case 2.
+            const dueCount = dayData.total_due;
 
             content += `
                 <div class="summary-details">
                     <p class="status ${statusClass}">${statusText}</p>
-                    <ul class="user-list">${userSummaries}</ul>
+                    <ul class="user-list"> Total: ${checkedCount}/ ${dueCount}</ul>
+                    <ul class="user-list"> ${periodSummaries}</ul>
                 </div>
             `;
         }
