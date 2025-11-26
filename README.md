@@ -50,7 +50,7 @@ This will:
 
 No need to do this again unless there is a change in the checklist.
 
-### 6. Local Development
+### 5. Local Development
 
 ```bash
 uv run uvicorn api.index:app --reload
@@ -58,7 +58,7 @@ uv run uvicorn api.index:app --reload
 
 Then visit `http://localhost:8000` in your browser.
 
-### 7. Deploy to Vercel
+### 6. Deploy to Vercel
 
 Set environment variables in Vercel Dashboard:
   - Go to your project settings
@@ -89,16 +89,6 @@ Set environment variables in Vercel Dashboard:
 └── README.md            # This file
 ```
 
-## API Endpoints
-
-- `GET /api/checklist?date=YYYY-MM-DD` - Get checklist for a date
-- `POST /api/checklist` - Update checklist
-- `POST /api/checklist/toggle` - Toggle a checklist item
-- `POST /api/checklist/photo` - Upload a photo for a checklist item
-- `GET /api/checklist/items` - Get checklist items structure
-- `POST /api/checklist/items` - Set checklist items structure
-- `GET /api/checklist/last-completions` - Get last completion date for each task across all dates
-
 ## Usage
 
 1. Open the web app
@@ -108,77 +98,6 @@ Set environment variables in Vercel Dashboard:
 5. Use the filters (Process / Equipment / Frequency) to focus on a subset of tasks
 6. Use "Upload Photo" on any task to attach evidence (images only, max 10 MB)
 7. Each user's checks and photos are tracked separately
-
-## Customization
-
-### Modify Checklist Structure
-
-Edit `scripts/parse_excel.py` to adjust how the Excel file is parsed based on your specific format.
-
-### Styling
-
-Edit `static/styles.css` to customize the appearance.
-
-### Firebase Security Rules
-
-Make sure to set up proper Firestore security rules in Firebase Console:
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /checklists/{date} {
-      allow read: if true;
-      allow write: if true;
-      // For production, add proper authentication rules
-    }
-    match /config/{document} {
-      allow read: if true;
-      allow write: if false; // Only allow writes from admin
-    }
-  }
-}
-```
-
-For Firebase Storage, start with permissive rules while testing, then tighten access:
-
-```javascript
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if request.time < timestamp.date(2025, 12, 31); // TODO: lock down
-    }
-  }
-}
-```
-
-## Troubleshooting
-
-### Firebase Connection Issues
-
-- Verify your `firebase-credentials.json` file is correct
-- Check that Firestore **and Storage** are enabled in your Firebase project
-- Ensure environment variables are set correctly in Vercel
-
-### Checklist Not Loading
-
-- Run `scripts/parse_excel.py` to initialize the checklist structure
-- Check browser console for errors
-- Verify API endpoints are accessible
-
-### Photo Upload Issues
-
-- Confirm `FIREBASE_STORAGE_BUCKET` matches your Firebase Storage bucket name
-- Ensure Firebase Storage rules allow uploads (see example above)
-- Check that uploads are below the 10 MB limit
-- Verify the Vercel project has the Storage env var set in all environments
-
-### Vercel Deployment Issues
-
-- Ensure `vercel.json` is in the root directory
-- Check that Python runtime is supported (Vercel uses Python 3.9 by default)
-- Verify all environment variables are set in Vercel dashboard
 
 ## License
 
