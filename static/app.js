@@ -274,7 +274,7 @@ async function submitChecklist(showAlert = true) {
         if (data.success) {
             // After successful submit, reload from server to refresh last-completions
             await loadChecklist();
-            alert('Checklist submitted successfully.');
+            // alert('Checklist submitted successfully.');
         } else {
             throw new Error(data.error || 'Submit failed');
         }
