@@ -3,14 +3,11 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, firestore
 import os
 from datetime import datetime, timedelta
 import json
 import time
-# from dotenv import load_dotenv
-
-# load_dotenv()
 
 # Get the project root directory (parent of 'api' folder)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -180,7 +177,6 @@ async def toggle_check(data: dict):
     date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
     item_id = data.get('item_id')
     user = data.get('user', 'anonymous')
-    # --- FIX 1: Corrected payload reference to 'data' and extracted note ---
     note = data.get('note', '') 
 
     if not item_id:
@@ -317,6 +313,8 @@ async def get_calendar_summary(start_date: str, end_date: str):
         last_completions = fetch_all_last_completions() # Last completion dates
         total_master_items = fetch_master_item_count()
         
+        item_period_map = {item.get('id'): item.get('periodDays') for item in master_items}
+
         # Convert string dates to datetime objects for comparison
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
@@ -331,10 +329,11 @@ async def get_calendar_summary(start_date: str, end_date: str):
             doc = doc_ref.get()
 
             items_due_count = 0
+            period_due_counts = {}
             
             for item in master_items:
                 item_id = item.get('id')
-                period_days = item.get('periodDays')
+                period_days = item.get('periodDays', 0)
                 
                 # Check if the task is due for the current day based on recurrence
                 is_due = True
@@ -355,13 +354,14 @@ async def get_calendar_summary(start_date: str, end_date: str):
 
                 if is_due:
                     items_due_count += 1
-            
-            # ... (rest of the day_summary calculation logic remains the same)
+                    period_due_counts[period_days] = period_due_counts.get(period_days, 0) + 1
+
+
             day_summary = {
                 'submitted': False,
                 'total_checked': 0,
-                'users': {},  # {user_name: count}
-                'total_due': items_due_count if items_due_count > 0 else total_master_items
+                'period_checks': {}, 
+                'period_due_counts': period_due_counts,
             }
 
             if doc.exists:
@@ -374,16 +374,28 @@ async def get_calendar_summary(start_date: str, end_date: str):
                     
                     # Calculate total checks and user counts
                     total_checked = 0
-                    user_checks = {}
+                    period_checks = day_summary['period_checks']
                     
                     for item_id, user_data in all_checked_items.items():
+                        # Determine the period for this item
+                        period_days = item_period_map.get(item_id, 0) # Default to 0 for non-periodic/unknown
+
                         for user_name, check_info in user_data.items():
                             if check_info.get('checked'):
                                 total_checked += 1
-                                user_checks[user_name] = user_checks.get(user_name, 0) + 1
-                    
+                                # Aggregate by period_days
+                                period_checks[period_days] = period_checks.get(period_days, 0) + 1
+                                break # Count an item check once, regardless of how many users checked it
+
                     day_summary['total_checked'] = total_checked
-                    day_summary['users'] = user_checks
+            
+            for key in day_summary['period_checks']:
+                # Check if the key also exists in the second dictionary
+                if key in day_summary['period_due_counts']:
+                    # Add the values and store the result
+                    day_summary['period_due_counts'][key] = day_summary['period_checks'][key] + day_summary['period_due_counts'][key]
+            
+            day_summary['total_due'] = sum(day_summary['period_due_counts'].values())
 
             summary_data[date_str] = day_summary
             
@@ -419,15 +431,3 @@ async def serve_static(filename: str):
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return FileResponse(file_path)
     return JSONResponse({"error": "Not found"}, status_code=404)
-
-
-# Vercel serverless function handler (ASGI)
-# Export an ASGI-compatible handler so Vercel can invoke this app.
-# async def handler(scope, receive, send):
-#     await app(scope, receive, send)
-
-
-# __all__ = ['handler', 'app']
-# from mangum import Mangum
-
-# handler = Mangum(app)
