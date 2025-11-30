@@ -75,8 +75,24 @@ function nestedToCSV(obj) {
     return rows.join("\n");
 }
 
+// function downloadCSV(csvContent, filename) {
+//     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+//     const url = URL.createObjectURL(blob);
+
+//     const link = document.createElement("a");
+//     link.href = url;
+//     link.setAttribute("download", filename);
+//     document.body.appendChild(link);
+//     link.click();
+//     document.body.removeChild(link);
+
+//     URL.revokeObjectURL(url);
+// }
+
 function downloadCSV(csvContent, filename) {
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const bom = "\ufeff"; 
+    const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+    
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
@@ -706,65 +722,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const downloadBtn = document.getElementById('download-btn');
-    if (downloadBtn) {
-        downloadBtn.addEventListener('click', () => {
-            // Get the current date to construct the API URL dynamically
-            const date = new Date().toISOString().slice(0, 10); // e.g., "2025-11-26"
-            const apiUrl = `${API_BASE}/checklist?date=${date}`;
-    
-            fetch(apiUrl)
-                .then(response => {
-                    // Check if the request was successful
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    // Parse the response as JSON (assuming your API returns JSON)
-                    return response.json();
-                })
-                .then(data => {
-                    // Step 2: Call the function to handle the download
-                    const csv = nestedToCSV(data.checked || {});
-                    downloadCSV(csv, `checklist_checked_${date}.csv`);
-                })
-                .catch(error => {
-                    console.error('Error fetching or processing data:', error);
-                    alert('Failed to download data. Check the console for details.');
-                });
-        });
-    }
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => {
+                // *** CHANGE IS HERE ***
+                // 1. Get the date from the input field
+                const selectedDate = dateInput.value; // Accesses the globally defined dateInput DOM element
+                
+                // 2. Use the selected date to construct the API URL
+                const apiUrl = `${API_BASE}/checklist?date=${selectedDate}`;
+        
+                fetch(apiUrl)
+                    .then(response => {
+                        // Check if the request was successful
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        // Parse the response as JSON
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Call the function to handle the download
+                        const csv = nestedToCSV(data.checked || {});
+                        // Update filename to reflect the selected date
+                        downloadCSV(csv, `checklist_checked_${selectedDate}.csv`);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching or processing data:', error);
+                        alert('Failed to download data. Check the console for details.');
+                    });
+            });
+        }
 });
 
-/**
- * Triggers a download of a JSON object as a file.
- * @param {object} data - The JSON object to download.
- * @param {string} filename - The name of the file to save.
- */
-function downloadJson(data, filename) {
-    // Convert the JavaScript object into a JSON string
-    const jsonString = JSON.stringify(data, null, 4); 
+// /**
+//  * Triggers a download of a JSON object as a file.
+//  * @param {object} data - The JSON object to download.
+//  * @param {string} filename - The name of the file to save.
+//  */
+// function downloadJson(data, filename) {
+//     // Convert the JavaScript object into a JSON string
+//     const jsonString = JSON.stringify(data, null, 4); 
 
-    // Create a Blob (Binary Large Object) from the string
-    const blob = new Blob([jsonString], { type: 'application/json' });
+//     // Create a Blob (Binary Large Object) from the string
+//     const blob = new Blob([jsonString], { type: 'application/json' });
 
-    // Create a temporary anchor element
-    const a = document.createElement('a');
+//     // Create a temporary anchor element
+//     const a = document.createElement('a');
     
-    // Create a URL for the Blob
-    a.href = URL.createObjectURL(blob);
+//     // Create a URL for the Blob
+//     a.href = URL.createObjectURL(blob);
     
-    // Set the suggested filename
-    a.download = filename;
+//     // Set the suggested filename
+//     a.download = filename;
     
-    // Append to the document body (required for Firefox)
-    document.body.appendChild(a);
+//     // Append to the document body (required for Firefox)
+//     document.body.appendChild(a);
     
-    // Programmatically click the anchor to trigger the download
-    a.click();
+//     // Programmatically click the anchor to trigger the download
+//     a.click();
     
-    // Clean up: remove the temporary element and revoke the Blob URL
-    document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-}
+//     // Clean up: remove the temporary element and revoke the Blob URL
+//     document.body.removeChild(a);
+//     URL.revokeObjectURL(a.href);
+// }
 
 // Load checklist on page load
 loadChecklist();
