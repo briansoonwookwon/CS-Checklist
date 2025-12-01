@@ -56,19 +56,27 @@ function updateItemNote(itemId, note) {
     // If the item is not checked, we won't save the note until the user checks the item.
 }
 
-function nestedToCSV(obj) {
-    const rows = ["item,user,checked,timestamp,note"]; // header row
+/**
+ * Converts the nested checked items object into a CSV string.
+ * @param {object} obj - The checked items object {item_id: {user: {data}}}
+ * @param {object} itemMap - A map of {item_id: item_object} for lookup.
+ * @returns {string} The CSV content.
+ */
+function nestedToCSV(obj, itemMap) {
+    const rows = ["item_id,item,user,checked,timestamp,note"];
 
     for (const itemKey in obj) {
         const users = obj[itemKey];
+        const itemDetails = itemMap[itemKey] || {};
+        const itemDescription = itemDetails.item || itemDetails.text || '';
 
         for (const userName in users) {
             const entry = users[userName];
             const checked = entry.checked ?? "";
             const timestamp = entry.timestamp ?? "";
-            const note = entry.note ?? "";
+            const note = entry.note ? `"${String(entry.note).replace(/"/g, '""')}"` : "";
 
-            rows.push(`${itemKey},${userName},${checked},${timestamp},${note}`);
+            rows.push(`${itemKey},"${itemDescription}",${userName},${checked},${timestamp},${note}`);
         }
     }
 
@@ -735,9 +743,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('download-btn');
         if (downloadBtn) {
             downloadBtn.addEventListener('click', () => {
-                // *** CHANGE IS HERE ***
                 // 1. Get the date from the input field
                 const selectedDate = dateInput.value; // Accesses the globally defined dateInput DOM element
+                const itemMap = checklistItems.reduce((acc, item) => {
+                    acc[item.id] = item;
+                    return acc;
+                }, {});
                 
                 // 2. Use the selected date to construct the API URL
                 const apiUrl = `${API_BASE}/checklist?date=${selectedDate}`;
@@ -753,7 +764,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                     .then(data => {
                         // Call the function to handle the download
-                        const csv = nestedToCSV(data.checked || {});
+                        const csv = nestedToCSV(data.checked || {}, itemMap);
                         // Update filename to reflect the selected date
                         downloadCSV(csv, `checklist_checked_${selectedDate}.csv`);
                     })
