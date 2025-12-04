@@ -808,5 +808,15 @@ document.addEventListener('DOMContentLoaded', () => {
 //     URL.revokeObjectURL(a.href);
 // }
 
+const fp = flatpickr("#date-range", {
+    mode: "range",
+    dateFormat: "Y-m-d",
+});
+
+// Button triggers the popup
+document.getElementById("open-range").addEventListener("click", () => {
+    fp.open();
+});
+
 // Load checklist on page load
 loadChecklist();
