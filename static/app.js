@@ -808,14 +808,19 @@ document.addEventListener('DOMContentLoaded', () => {
 //     URL.revokeObjectURL(a.href);
 // }
 
+const button = document.getElementById("open-range");
 const fp = flatpickr("#date-range", {
     mode: "range",
     dateFormat: "Y-m-d",
+    appendTo: document.getElementById("picker-wrapper"),
     onClose: () => console.log("Range selected:", fp.input.value)
 });
 
 // Button triggers the popup
-document.getElementById("open-range").addEventListener("click", () => {
+// document.getElementById("open-range").addEventListener("click", () => {
+//     fp.open();
+// });
+button.addEventListener("click", () => {
     fp.open();
 });
 
