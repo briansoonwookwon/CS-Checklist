@@ -811,6 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const fp = flatpickr("#date-range", {
     mode: "range",
     dateFormat: "Y-m-d",
+    onClose: () => console.log("Range selected:", fp.input.value)
 });
 
 // Button triggers the popup
