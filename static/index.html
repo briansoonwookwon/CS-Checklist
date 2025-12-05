@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="./symbol_ci.svg" type="image/svg+xml">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -79,19 +81,21 @@
                 <div class="submit-btn">
                     <button id="submit-btn" class="submit-btn">Submit Checklist</button>
                 </div>
-                <div class="submit-btn"> 
-                    <button id="summary-btn" class="summary-btn">View Summary</button> 
-                </div>
-                <!-- <div class="submit-btn"> 
-                    <button id="download-btn" class="download-btn">Download Checklist</button> 
-                </div> -->
                 <div class="submit-btn">
-                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-                    <div id="picker-wrapper" style="position: relative; display: inline-block;">
-                        <input id="date-range" style="display:none;">
-                        <button id="open-range">Download Checklist</button>
-                    </div>
-                    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+                    <button id="summary-btn" class="summary-btn">View Summary</button>
+                </div>
+                <div class="submit-btn">
+                    <input id="date-range" style="display: none;">
+                    <button id="open-range" class="download-btn">Download Checklist</button>
+
+                    <!-- Dependencies for DateRangePicker -->
+                    <script type="text/javascript" src="https://cdn.jsdelivr.net/jquery/latest/jquery.min.js"></script>
+                    <script type="text/javascript"
+                        src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+                    <script type="text/javascript"
+                        src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+                    <link rel="stylesheet" type="text/css"
+                        href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
                 </div>
             </div>
             <div class="checklist" id="checklist">
@@ -102,6 +106,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>
-
-

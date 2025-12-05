@@ -776,18 +776,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // }
 });
 
-const button = document.getElementById("open-range");
-const fp = flatpickr("#date-range", {
-    mode: "range",
-    dateFormat: "Y-m-d",
-    disableMobile: false,
-    appendTo: document.getElementById("picker-wrapper"),
-    onClose: (selectedDates, dateStr, instance) => {
-        if (selectedDates.length === 2) {
-            const startDate = instance.formatDate(selectedDates[0], "Y-m-d");
-            const endDate = instance.formatDate(selectedDates[1], "Y-m-d");
+// Date Range Picker Logic
+$(function () {
+    const $dateRangeInput = $('#date-range');
+    const $openRangeBtn = $('#open-range');
 
+    if ($dateRangeInput.length && $openRangeBtn.length) {
+        // Initialize daterangepicker on the hidden input
+        $dateRangeInput.daterangepicker({
+            opens: 'left',
+            autoUpdateInput: false,
+            locale: {
+                cancelLabel: 'Clear'
+            }
+        });
+
+        // Open the picker when the button is clicked
+        $openRangeBtn.on('click', function () {
+            $dateRangeInput.trigger('click');
+        });
+
+        // Handle date selection
+        $dateRangeInput.on('apply.daterangepicker', function (ev, picker) {
+            const startDate = picker.startDate.format('YYYY-MM-DD');
+            const endDate = picker.endDate.format('YYYY-MM-DD');
+
+            console.log(`Date range selected: ${startDate} to ${endDate}`);
+
+            // Fetch data for the range
             const apiUrl = `${API_BASE}/checklist/range?start_date=${startDate}&end_date=${endDate}`;
+
+            // Show loading state (optional but good UX)
+            const originalText = $openRangeBtn.text();
+            $openRangeBtn.text('Downloading...');
+            $openRangeBtn.prop('disabled', true);
 
             fetch(apiUrl)
                 .then(response => {
@@ -797,28 +819,32 @@ const fp = flatpickr("#date-range", {
                     return response.json();
                 })
                 .then(data => {
+                    // Create item map for descriptions
                     const itemMap = checklistItems.reduce((acc, item) => {
                         acc[item.id] = item;
                         return acc;
                     }, {});
 
-                    // Use data.checked if available, otherwise fallback to data itself
-                    // This handles potential differences in API response structure
-                    const content = data.checked || data;
-                    const csv = nestedToCSV(content, itemMap);
-                    downloadCSV(csv, `checklist_range_${startDate}_to_${endDate}.csv`);
+                    // Convert to CSV
+                    // Note: nestedToCSV expects {item_id: {user: data}} structure
+                    // The API returns {checked: {item_id__date: {user: data}}}
+                    // We can pass data.checked directly because nestedToCSV iterates over keys
+                    const csv = nestedToCSV(data.checked || {}, itemMap);
+
+                    // Download
+                    downloadCSV(csv, `checklist_export_${startDate}_to_${endDate}.csv`);
                 })
                 .catch(error => {
                     console.error('Error fetching range data:', error);
-                    alert('Failed to download range data. Check console for details.');
+                    alert('Failed to download data. Check console for details.');
+                })
+                .finally(() => {
+                    // Reset button state
+                    $openRangeBtn.text(originalText);
+                    $openRangeBtn.prop('disabled', false);
                 });
-        }
+        });
     }
-});
-
-
-button.addEventListener("click", () => {
-    fp.open();
 });
 
 // Load checklist on page load
