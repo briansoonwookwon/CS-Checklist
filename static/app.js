@@ -780,6 +780,7 @@ const button = document.getElementById("open-range");
 const fp = flatpickr("#date-range", {
     mode: "range",
     dateFormat: "Y-m-d",
+    disableMobile: false,
     appendTo: document.getElementById("picker-wrapper"),
     onClose: (selectedDates, dateStr, instance) => {
         if (selectedDates.length === 2) {
