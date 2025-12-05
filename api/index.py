@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, firestore
 import os
 from datetime import datetime, timedelta
 import json
@@ -301,6 +301,83 @@ async def get_last_completions():
 
         return JSONResponse({"lastCompletions": last_completions})
     except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get('/api/checklist/range')
+async def get_checklist_range(start_date: str, end_date: str):
+    """
+    Get all checked items across a date range (inclusive).
+    The result is a single merged 'checked' object where the data from the 
+    most recent check for an item/user is retained if multiple exist, 
+    but for CSV purposes, we combine all data.
+    """
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="Missing startDate or endDate query parameters")
+
+    try:
+        ensure_firebase()
+
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        queries = []
+        current_dt = start_dt
+
+        while current_dt <= end_dt:
+            # Append the document reference using the formatted date
+            # (Assuming 'db' is your database client object)
+            queries.append(db.collection('checklists').document(current_dt.strftime('%Y-%m-%d')))
+            
+            # Increment the date by one day
+            current_dt += timedelta(days=1)
+        
+        merged_checked_for_csv = {} # Format: {'item_id__YYYY-MM-DD': {user: {data}}}
+        for doc_ref in queries:
+            doc = doc_ref.get()
+
+            if doc.exists:
+                doc_date = doc.id
+                data = doc.to_dict()
+                checked_items_for_day = data.get('checked', {})
+                
+                for item_id, users_checked in checked_items_for_day.items():
+                    
+                    # Create a unique key for this item check on this date
+                    # The frontend's CSV converter will treat this as a unique item.
+                    # E.g., 'ITEM_123__2025-12-01'
+                    csv_item_key = f"{item_id}__{doc_date}"
+                    
+                    # Copy the user check data, adding the date to the entry for the CSV
+                    copied_user_data = {}
+                    for user_name, check_data in users_checked.items():
+                        # The timestamp stored in the DB is SERVER_TIMESTAMP, 
+                        # which is not guaranteed to be the earliest/latest, 
+                        # but the doc_date is reliable for the check date.
+                        
+                        # We create a new entry combining the original check data
+                        # with the document date to ensure uniqueness in the CSV output.
+                        new_entry = make_json_serializable(check_data.copy())
+                        
+                        # The original timestamp will be the time, but we ensure the date is present
+                        # If the check_data doesn't have a note, we default to ""
+                        new_entry['date'] = doc_date # Add the date for clarity in CSV
+                        
+                        copied_user_data[user_name] = new_entry
+                    
+                    # Add the date-scoped item entry to the merged list
+                    merged_checked_for_csv[csv_item_key] = copied_user_data
+        
+        # The frontend expects a JSON response with a 'checked' key
+        return JSONResponse({
+            'startDate': start_date,
+            'endDate': end_date,
+            'checked': merged_checked_for_csv
+        })
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    except Exception as e:
+        print(f"Error fetching checklist range: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get('/api/summary/calendar')

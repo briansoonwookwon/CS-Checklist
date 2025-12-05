@@ -52,7 +52,7 @@ function updateItemNote(itemId, note) {
         // NEW: If the user is currently checking this item, immediately save the checklist
         // This makes the note "submission" feel instant when they blur the field.
         submitChecklist(false); // Pass 'false' to skip the alert, making it a silent save
-    } 
+    }
     // If the item is not checked, we won't save the note until the user checks the item.
 }
 
@@ -98,9 +98,9 @@ function nestedToCSV(obj, itemMap) {
 // }
 
 function downloadCSV(csvContent, filename) {
-    const bom = "\ufeff"; 
+    const bom = "\ufeff";
     const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
-    
+
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
@@ -152,7 +152,7 @@ dateInput.addEventListener('change', (e) => {
 
 userInput.addEventListener('change', (e) => {
     // Trim and use a default value for interaction logic
-    currentUser = e.target.value.trim(); 
+    currentUser = e.target.value.trim();
     localStorage.setItem('checklist_user', currentUser);
     renderChecklist();
 });
@@ -182,7 +182,7 @@ async function loadChecklistItems() {
     try {
         const response = await fetch(`${API_BASE}/checklist/items`);
         const data = await response.json();
-        
+
         if (data.items && data.items.length > 0) {
             checklistItems = data.items;
             populateFilters();
@@ -203,26 +203,26 @@ async function loadChecklistItems() {
 async function loadChecklist() {
     showLoading();
     hideError();
-    
+
     // First load the checklist items structure
     const itemsLoaded = await loadChecklistItems();
     if (!itemsLoaded) {
         return;
     }
-    
+
     // Load last completion dates and current date's checklist in parallel
     try {
         const [completionsResponse, checklistResponse] = await Promise.all([
             fetch(`${API_BASE}/checklist/last-completions`),
             fetch(`${API_BASE}/checklist?date=${currentDate}`)
         ]);
-        
+
         const completionsData = await completionsResponse.json();
         lastCompletions = completionsData.lastCompletions || {};
-        
+
         const checklistData = await checklistResponse.json();
         checkedItems = checklistData.checked ? checklistData.checked : {};
-        
+
         renderChecklist();
         hideLoading();
     } catch (error) {
@@ -284,7 +284,7 @@ async function submitChecklist(showAlert = true) {
         userInput.focus();
         return;
     }
-    
+
     const payload = {
         date: currentDate,
         items: checklistItems,
@@ -323,7 +323,7 @@ function renderChecklist() {
         checklistDiv.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No checklist items available.</p>';
         return;
     }
-    
+
     // Get today's actual date for comparison
     const actualToday = getTodayDate();
 
@@ -351,38 +351,38 @@ function renderChecklist() {
         const equipmentMatches = filterEquipment === 'all' || (item.equipment || 'General') === filterEquipment;
         const periodValue = item.periodDays != null ? String(item.periodDays) : 'custom';
         const periodMatches = filterPeriod === 'all' || periodValue === filterPeriod;
-        
+
         // Check if the item is already checked for the current date (by anyone)
         const isAlreadyCheckedToday = checkedItems[item.id];
-        
+
         // Rule 1 & 2: If checked OR viewing a past date, always show the item
         if (isAlreadyCheckedToday || currentDate < actualToday) {
             return categoryMatches && processMatches && equipmentMatches && periodMatches;
         }
-        
+
         // Rule 3: If unchecked AND viewing today/future, apply periodic filter
-        
+
         const periodDays = item.periodDays;
         if (periodDays != null && periodDays > 0) {
             const lastCompletionDate = lastCompletions[item.id];
-            
+
             if (lastCompletionDate) {
                 // Calculate days since last completion
                 const lastDate = new Date(lastCompletionDate + 'T00:00:00');
                 const today = new Date(currentDate + 'T00:00:00');
                 const daysSince = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
-                
+
                 // Hide task if NOT enough days have passed
                 if (daysSince < periodDays) {
-                    return false; 
+                    return false;
                 }
             }
         }
-        
+
         // If it passed all checks (manual filters and periodic requirement or never done), show it.
         return categoryMatches && processMatches && equipmentMatches && periodMatches;
     });
-    
+
     if (filteredItems.length === 0) {
         checklistDiv.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No items match the selected filters.</p>';
         updateStats([]);
@@ -391,24 +391,24 @@ function renderChecklist() {
 
     checklistDiv.innerHTML = filteredItems.map(item => {
         // Check if ANY user completed the task for visual checkmark
-        const isChecked = checkedItems[item.id]; 
-        
+        const isChecked = checkedItems[item.id];
+
         // 1. Determine the existing note for the current user
         let existingNote = '';
         const currentUserCheckData = checkedItems[item.id] ? checkedItems[item.id][currentUser] : null;
         if (currentUserCheckData && currentUserCheckData.note) {
             existingNote = currentUserCheckData.note;
         }
-        
+
         const noteInputId = `note-input-${item.id}`; // Unique ID for the textarea
-        
+
         // 2. Get an array of [user, data] pairs if item is checked
         const checkedEntries = checkedItems[item.id] ? Object.entries(checkedItems[item.id]) : [];
-        
+
         let checkedByHtml = '';
         if (checkedEntries.length > 0) {
             checkedByHtml = checkedEntries.map(([user, data]) => {
-                const timeStr = formatTime(data.timestamp); 
+                const timeStr = formatTime(data.timestamp);
                 const noteDisplay = data.note ? `<span class="note-display">: ${escapeHtml(data.note)}</span>` : '';
 
                 return `
@@ -423,7 +423,7 @@ function renderChecklist() {
                 `;
             }).join(', '); // Join multiple checkers with a comma and space
         }
-        
+
         const processLabel = item.process || item.category || 'General';
         const equipmentLabel = item.equipment || 'N/A';
         const taskLabel = item.item || item.text || 'Task';
@@ -432,8 +432,8 @@ function renderChecklist() {
 
         const hasPhoto = uploadedPhotos[item.id];
         const photoBtnText = hasPhoto ? '📷 Photo Added' : '📷 Upload Photo';
-        const photoBtnStyle = hasPhoto 
-            ? 'background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;' 
+        const photoBtnStyle = hasPhoto
+            ? 'background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;'
             : 'background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 5px;';
 
         const hasNote = existingNote && existingNote.trim().length > 0;
@@ -441,7 +441,7 @@ function renderChecklist() {
         const noteDisplay = hasNote ? 'block' : 'none';
         const noteBtnText = hasNote ? '📝 Edit Note' : '📝 Add Note';
 
-            return `
+        return `
             <div class="checklist-item ${isChecked ? 'checked' : ''}" onclick="toggleCheck('${item.id}')">
                 <div class="checkbox"></div>
                 <div class="item-content">
@@ -489,7 +489,7 @@ function renderChecklist() {
             </div>
         `;
     }).join('');
-    
+
     updateStats(filteredItems);
 }
 
@@ -502,7 +502,7 @@ function updateStats(visibleItems) {
     ).length;
 
     const progress = total > 0 ? Math.round((checked / total) * 100) : 0;
-    
+
     totalItemsSpan.textContent = total;
     checkedCountSpan.textContent = checked;
     progressSpan.textContent = progress + '%';
@@ -603,7 +603,7 @@ function triggerPhotoUpload(itemId) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*'; // Only accept images
-    
+
     input.onchange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -613,14 +613,14 @@ function triggerPhotoUpload(itemId) {
 
             const reader = new FileReader();
 
-            reader.onload = function(event) {
+            reader.onload = function (event) {
                 // The result is the base64 encoded image string (Data URL)
                 const imageUrl = event.target.result;
 
                 // Create and insert an <img> element for preview
                 const imagePreviewId = `photo-preview-${itemId}`;
                 let previewElement = document.getElementById(imagePreviewId);
-                
+
                 // Find the specific item's action div to append the image to
                 const itemDiv = document.querySelector(`.checklist-item[onclick*="'${itemId}'"]`);
                 const contentDiv = itemDiv ? itemDiv.querySelector('.item-content') : null;
@@ -630,9 +630,9 @@ function triggerPhotoUpload(itemId) {
                         previewElement = document.createElement('img');
                         previewElement.id = imagePreviewId;
                         previewElement.className = 'photo-preview';
-                        
+
                         // Basic styling to ensure visibility
-                        previewElement.style.maxWidth = '100px'; 
+                        previewElement.style.maxWidth = '100px';
                         previewElement.style.maxHeight = '100px';
                         previewElement.style.marginTop = '10px';
                         previewElement.style.marginBottom = '10px';
@@ -641,9 +641,9 @@ function triggerPhotoUpload(itemId) {
                         previewElement.style.display = 'block';
 
                         // Append the new image preview to the item-content div
-                        contentDiv.appendChild(previewElement); 
+                        contentDiv.appendChild(previewElement);
                     }
-                    
+
                     // Set the image source
                     previewElement.src = imageUrl;
                 } else {
@@ -652,15 +652,15 @@ function triggerPhotoUpload(itemId) {
             };
 
             // Read the file as a Data URL (base64)
-            reader.readAsDataURL(file);            
+            reader.readAsDataURL(file);
             // 2. Re-render to show the button state change
             renderChecklist();
-            
+
             // Optional: Log to console to prove it captured the file object
             console.log(`Simulated upload for Item ${itemId}:`, file);
         }
     };
-    
+
     // Open the file dialog
     input.click();
 }
@@ -693,7 +693,7 @@ async function saveNoteOnly(itemId) {
     if (noteInput) {
         updateItemNote(itemId, noteInput.value);
     }
-    
+
     // Check if the item is actually checked by the current user before saving
     if (!checkedItems[itemId] || !checkedItems[itemId][currentUser]) {
         alert('You must check the item first before saving a standalone note.');
@@ -702,12 +702,12 @@ async function saveNoteOnly(itemId) {
 
     // Call submitChecklist, which sends the entire local state, including the note
     await submitChecklist();
-    
+
     // Optional: Hide the note box after saving
     toggleNoteBox(itemId, true); // Pass true to force close
 
     // Re-render to show the note instantly in the checked-by line
-    renderChecklist(); 
+    renderChecklist();
 }
 
 // Make it global
@@ -740,86 +740,82 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const downloadBtn = document.getElementById('download-btn');
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', () => {
-                // 1. Get the date from the input field
-                const selectedDate = dateInput.value; // Accesses the globally defined dateInput DOM element
-                const itemMap = checklistItems.reduce((acc, item) => {
-                    acc[item.id] = item;
-                    return acc;
-                }, {});
-                
-                // 2. Use the selected date to construct the API URL
-                const apiUrl = `${API_BASE}/checklist?date=${selectedDate}`;
-        
-                fetch(apiUrl)
-                    .then(response => {
-                        // Check if the request was successful
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        // Parse the response as JSON
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Call the function to handle the download
-                        const csv = nestedToCSV(data.checked || {}, itemMap);
-                        // Update filename to reflect the selected date
-                        downloadCSV(csv, `checklist_checked_${selectedDate}.csv`);
-                    })
-                    .catch(error => {
-                        console.error('Error fetching or processing data:', error);
-                        alert('Failed to download data. Check the console for details.');
-                    });
-            });
-        }
+    // const downloadBtn = document.getElementById('download-btn');
+    // if (downloadBtn) {
+    //     downloadBtn.addEventListener('click', () => {
+    //         // 1. Get the date from the input field
+    //         const selectedDate = dateInput.value; // Accesses the globally defined dateInput DOM element
+    //         const itemMap = checklistItems.reduce((acc, item) => {
+    //             acc[item.id] = item;
+    //             return acc;
+    //         }, {});
+
+    //         // 2. Use the selected date to construct the API URL
+    //         const apiUrl = `${API_BASE}/checklist?date=${selectedDate}`;
+
+    //         fetch(apiUrl)
+    //             .then(response => {
+    //                 // Check if the request was successful
+    //                 if (!response.ok) {
+    //                     throw new Error(`HTTP error! Status: ${response.status}`);
+    //                 }
+    //                 // Parse the response as JSON
+    //                 return response.json();
+    //             })
+    //             .then(data => {
+    //                 // Call the function to handle the download
+    //                 const csv = nestedToCSV(data.checked || {}, itemMap);
+    //                 // Update filename to reflect the selected date
+    //                 downloadCSV(csv, `checklist_checked_${selectedDate}.csv`);
+    //             })
+    //             .catch(error => {
+    //                 console.error('Error fetching or processing data:', error);
+    //                 alert('Failed to download data. Check the console for details.');
+    //             });
+    //     });
+    // }
 });
-
-// /**
-//  * Triggers a download of a JSON object as a file.
-//  * @param {object} data - The JSON object to download.
-//  * @param {string} filename - The name of the file to save.
-//  */
-// function downloadJson(data, filename) {
-//     // Convert the JavaScript object into a JSON string
-//     const jsonString = JSON.stringify(data, null, 4); 
-
-//     // Create a Blob (Binary Large Object) from the string
-//     const blob = new Blob([jsonString], { type: 'application/json' });
-
-//     // Create a temporary anchor element
-//     const a = document.createElement('a');
-    
-//     // Create a URL for the Blob
-//     a.href = URL.createObjectURL(blob);
-    
-//     // Set the suggested filename
-//     a.download = filename;
-    
-//     // Append to the document body (required for Firefox)
-//     document.body.appendChild(a);
-    
-//     // Programmatically click the anchor to trigger the download
-//     a.click();
-    
-//     // Clean up: remove the temporary element and revoke the Blob URL
-//     document.body.removeChild(a);
-//     URL.revokeObjectURL(a.href);
-// }
 
 const button = document.getElementById("open-range");
 const fp = flatpickr("#date-range", {
     mode: "range",
     dateFormat: "Y-m-d",
     appendTo: document.getElementById("picker-wrapper"),
-    onClose: () => console.log("Range selected:", fp.input.value)
+    onClose: (selectedDates, dateStr, instance) => {
+        if (selectedDates.length === 2) {
+            const startDate = instance.formatDate(selectedDates[0], "Y-m-d");
+            const endDate = instance.formatDate(selectedDates[1], "Y-m-d");
+
+            const apiUrl = `${API_BASE}/checklist/range?start_date=${startDate}&end_date=${endDate}`;
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const itemMap = checklistItems.reduce((acc, item) => {
+                        acc[item.id] = item;
+                        return acc;
+                    }, {});
+
+                    // Use data.checked if available, otherwise fallback to data itself
+                    // This handles potential differences in API response structure
+                    const content = data.checked || data;
+                    const csv = nestedToCSV(content, itemMap);
+                    downloadCSV(csv, `checklist_range_${startDate}_to_${endDate}.csv`);
+                })
+                .catch(error => {
+                    console.error('Error fetching range data:', error);
+                    alert('Failed to download range data. Check console for details.');
+                });
+        }
+    }
 });
 
-// Button triggers the popup
-// document.getElementById("open-range").addEventListener("click", () => {
-//     fp.open();
-// });
+
 button.addEventListener("click", () => {
     fp.open();
 });
