@@ -42,27 +42,6 @@ header h1 {
     margin-top: 20px;
 }
 
-.header-logo {
-    /* Ensures the logo is always centered within the header */
-    display: block;
-    margin: 0 auto 15px; /* Centers horizontally and adds spacing below */
-    
-    /* Sets the maximum size, allowing the image to shrink */
-    max-height: 50px; /* Respects the intended height but makes it a max-limit */
-    height: auto;     /* Ensures image aspect ratio is maintained when scaling */
-    
-    /* Critical for mobile: Prevents the logo from exceeding the screen width */
-    max-width: 100%; 
-}
-
-/* Optional: If the logo is very wide, you can explicitly target mobile screens */
-@media (max-width: 480px) {
-    .header-logo {
-        /* On very small phones, you might want to slightly reduce the size */
-        max-height: 40px; 
-    }
-}
-
 .filter-controls {
     margin-top: 25px;
     display: flex;
